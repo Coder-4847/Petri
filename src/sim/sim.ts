@@ -1,8 +1,12 @@
-import { W, H, TICK_RATE, NG, K_ANIMAL, K_PRODUCER, K_FREE, IS_SOLID, IS_WATER } from '../shared/constants';
-import { FRAME_STRIDE, type SpeciesInfo, type ToWorker } from '../shared/protocol';
+import { W, H, TICK_RATE, NG, G, K_ANIMAL, K_PRODUCER, K_FREE, IS_SOLID, IS_WATER } from '../shared/constants';
+import { FRAME_STRIDE, type SpeciesInfo as SpeciesInfo_, type ToWorker } from '../shared/protocol';
 import { BIOMES, BIOME_INDEX } from '../data/biomes';
 import { World } from './world';
-import { stepWorld } from './ecology';
+import { stepWorld, spawn, type Ctx } from './ecology';
+import { SpeciesRegistry } from './species';
+import { RNG } from '../shared/rng';
+import { baseGenome } from './genes';
+import { seedPreview } from './seed';
 
 type Post = (msg: any, transfer?: Transferable[]) => void;
 
@@ -19,11 +23,11 @@ export class Sim {
   last = 0;
   seed = 1;
   view = { x0: 0, y0: 0, x1: W, y1: H, zoom: 4 };
-  events: any[] = [];
-  species: SpeciesInfo[] = [];
+  rng = new RNG(1);
+  ctx: Ctx = { sp: new SpeciesRegistry(this.rng), events: [] };
   simMs = 0; tps = 0; tpsCount = 0; tpsT = 0;
   lastFrame = 0; lastStats = 0;
-  sentTerrain = -1; sentSpeciesCount = 0;
+  sentTerrain = -1;
 
   constructor(private post: Post) {}
 
@@ -31,13 +35,13 @@ export class Sim {
 
   getWorld(i: number): World {
     let w = this.worlds[i];
-    if (!w) { w = new World(i, this.seed); this.worlds[i] = w; }
+    if (!w) { w = new World(i, this.seed); w.ctxRef = this.ctx; this.worlds[i] = w; seedPreview(w, this.ctx); }
     return w;
   }
 
   handle(m: ToWorker) {
     switch (m.t) {
-      case 'init': this.seed = m.seed; this.active = BIOME_INDEX[m.biome] ?? 0; this.getWorld(this.active); this.sentTerrain = -1; this.last = performance.now(); break;
+      case 'init': this.seed = m.seed; this.rng = new RNG(m.seed); this.ctx.sp = new SpeciesRegistry(this.rng); this.active = BIOME_INDEX[m.biome] ?? 0; this.getWorld(this.active); this.sentTerrain = -1; this.last = performance.now(); break;
       case 'speed': this.speed = m.v; break;
       case 'biome': { const i = BIOME_INDEX[m.id]; if (i !== undefined) { this.active = i; this.getWorld(i); this.sentTerrain = -1; } break; }
       case 'view': this.view = { x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, zoom: m.zoom }; break;
@@ -46,29 +50,22 @@ export class Sim {
     }
   }
 
-  /** Debug: fill the active world with n dummy entities to stress-test rendering. */
+  /** Debug: fill the active world with n creatures of 16 random species to stress-test rendering. */
   stress(n: number) {
     const w = this.world; w.allocEntities();
-    const e = w.ents;
-    if (this.species.length < 16) {
-      for (let i = 0; i < 16; i++) {
-        const genome: number[] = []; for (let k = 0; k < NG; k++) genome.push(w.rng.next());
-        genome[0] = 0.25 + w.rng.next() * 0.4;
-        this.species.push({ id: i, name: 'Dummy ' + i, parent: -1, born: 0, extinct: 0, genome, count: 0, peak: 0, kind: K_ANIMAL, color: 0xffffff });
-      }
+    const e = w.ents, sp = this.ctx.sp;
+    while (sp.list.length < 16) {
+      const g = baseGenome(); for (let k = 0; k < NG; k++) g[k] = w.rng.next();
+      g[0] = 0.3 + w.rng.next() * 0.3; g[G.PHOTO] = 0; g[G.HERB] = 0.8; g[G.CARN] = 0; g[G.SWIM] = 0.7; g[G.WALK] = 0; g[G.FLY] = 0;
+      sp.create(-1, g, 0, 0, undefined);
     }
+    sp.disabled = true;
     for (let i = 0; i < e.hi; i++) if (e.kind[i] !== K_FREE) e.release(i);
     for (let i = 0; i < n; i++) {
-      const s = e.alloc(); if (s < 0) break;
       let x = 0, y = 0;
-      for (let tries = 0; tries < 30; tries++) {
-        x = w.rng.range(2, W - 2); y = w.rng.range(2, H - 2);
-        const c = w.medium[(y | 0) * W + (x | 0)];
-        if (!IS_SOLID[c] && c !== 9) break;
-      }
-      e.x[s] = x; e.y[s] = y; e.vx[s] = w.rng.range(-1, 1); e.vy[s] = w.rng.range(-0.5, 0.5);
-      e.kind[s] = K_ANIMAL; e.species[s] = w.rng.int(16); e.size[s] = 0.8 + w.rng.next() * 2.2; e.health[s] = 1;
-      e.anim[s] = w.rng.next() * 6;
+      for (let tries = 0; tries < 30; tries++) { x = w.rng.range(2, W - 2); y = w.rng.range(2, H - 2); const c = w.medium[(y | 0) * W + (x | 0)]; if (IS_WATER[c]) break; }
+      const id = w.rng.int(16);
+      spawn(w, this.ctx, id, sp.founders[id], 0, x, y, { grown: true, energyFrac: 0.7 });
     }
   }
 
@@ -85,7 +82,7 @@ export class Sim {
       let n = 0;
       while (this.acc >= 1 && performance.now() < budget) {
         const t0 = performance.now();
-        stepWorld(w, this.events);
+        stepWorld(w, this.ctx);
         this.simMs = this.simMs * 0.95 + (performance.now() - t0) * 0.05;
         this.acc -= 1; n++;
       }
@@ -102,7 +99,8 @@ export class Sim {
       this.sentTerrain = w.terrainVersion;
       this.post({ t: 'world', biome: w.def.id, medium: w.medium.slice(), surfaceY: w.surfaceY, waterTop: w.waterTop, vents: w.vents, light: w.light.slice(), version: w.terrainVersion, env: { ...w.env } });
     }
-    if (this.species.length !== this.sentSpeciesCount) { this.sentSpeciesCount = this.species.length; this.post({ t: 'species', list: this.species }); }
+    const sp = this.ctx.sp;
+    if (sp.dirty.size) { const list = [...sp.dirty].map((id) => sp.list[id]); sp.dirty.clear(); this.post({ t: 'species', list }); }
     if (!w.ents) { this.post({ t: 'frame', tick: w.tick, data: new Float32Array(0), n: 0, events: [] }); return; }
     const e = w.ents, v = this.view;
     const mx = 6, x0 = v.x0 - mx, x1 = v.x1 + mx, y0 = v.y0 - mx, y1 = v.y1 + mx;
@@ -119,14 +117,14 @@ export class Sim {
       out[o + 6] = e.size[i]; out[o + 7] = Math.atan2(e.vy[i], Math.abs(e.vx[i]) + 0.001) * 0.6 * (e.facing[i] < 0 ? -1 : 1);
       n++;
     }
-    const events = this.events; this.events = [];
+    const events = this.ctx.events; this.ctx.events = [];
     this.post({ t: 'frame', tick: w.tick, data: out.subarray(0, n * FRAME_STRIDE), n, events }, [out.buffer]);
   }
 
   sendStats(w: World) {
     const counts: Record<number, number> = {};
     if (w.ents) { const e = w.ents; for (let i = 0; i < e.hi; i++) if (e.kind[i] !== K_FREE) counts[e.species[i]] = (counts[e.species[i]] || 0) + 1; }
-    this.post({ t: 'stats', stats: { tick: w.tick, biome: w.def.id, entities: w.ents ? w.ents.alive : 0, species: this.species.length, counts, simMs: this.simMs, tps: this.tps, env: { ...w.env } } });
+    this.post({ t: 'stats', stats: { tick: w.tick, biome: w.def.id, entities: w.ents ? w.ents.alive : 0, species: this.ctx.sp.list.length, counts, simMs: this.simMs, tps: this.tps, env: { ...w.env } } });
   }
 }
-void IS_WATER; void K_PRODUCER; void TICK_RATE;
+void IS_SOLID; void K_ANIMAL; void K_PRODUCER; void TICK_RATE;

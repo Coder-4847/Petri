@@ -48,6 +48,26 @@ run the coarse population model (Phase 3) so everything stays alive offscreen.
 `(slot, uid)` is a stable handle. `SpatialHash` (8-cell buckets, rebuilt each tick) answers neighbour queries.
 A genome is `NG` floats in [0,1] (`G` in `shared/constants.ts`). Derived traits are cached per entity.
 
+## Simulation rules (sim/ecology.ts)
+
+Per tick, per entity: **stress** (temperature, salinity, pressure, desiccation, toxins, oxygen — each compared with the
+creature's tolerance genes) → **perception** (staggered every 4th tick via the spatial hash: nearest food, nearest threat,
+herd vector, food gradient, density) → **behaviour** (flee › hunt/forage › wander, with habitat look-ahead and foraging memory)
+→ **locomotion** (swim / walk / fly / burrow / fall by medium, buoyancy, step-climbing, fall damage, drowning and
+suffocation via a breath reserve) → **energy** (basal metabolism ∝ mass^0.75 × complexity × brain × stress, plus movement) →
+**interaction** (graze, scavenge, bite, parasitise, fight back) → **health / death** → **reproduction**.
+
+* Producers are regrowing resources: grazers bite *energy* and leave a residual, so plants/plankton are depleted but not
+  exterminated; a separate seed reserve means grazing can't stop seeding. Rooted plants share a 1-D ground strip,
+  floating ones share 2-D water; carrying density reflects that.
+* Reproduction is gated on energy *affordability*, local food abundance, local crowding and a cooldown (`rcd`, separate
+  from the eat cooldown `cd`). Offspring inherit via `mutate`/`crossover`; `SpeciesRegistry.classify` splits a new species
+  when the genome drifts past `SPECIATION_DIST` from the founder.
+* Dead animals convert *in place* to carcasses (handles stay valid), which sink, decay into the nutrient field
+  and are scavenged. Carcass value ≈ stored energy, so bodies that grew for free aren't an energy source.
+* `tools/harness.ts` runs the real sim headlessly: `npx tsx tools/harness.ts reef4 60000 reef 7 --diag`.
+  `tools/physics.ts` checks drowning / suffocation / falling.
+
 ## Rendering
 
 * `terrain.ts` paints solids into a 4-texel-per-cell canvas once per terrain change, and draws water/lava as a

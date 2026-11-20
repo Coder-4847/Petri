@@ -26,6 +26,8 @@ export class EntityStore {
   // cached derived traits (see traits.ts)
   maxE: Float32Array; bmr: Float32Array; spSwim: Float32Array; spWalk: Float32Array; spFly: Float32Array;
   sense: Float32Array; atk: Float32Array; def: Float32Array; maxSize: Float32Array; life: Float32Array;
+  dx: Float32Array; dy: Float32Array; crowd: Float32Array; carn: Float32Array; herb: Float32Array; scav: Float32Array; filt: Float32Array; camo: Float32Array;
+  thr: Int32Array; thrUid: Int32Array; gx: Float32Array; gy: Float32Array; fx: Float32Array; fy: Float32Array; memX: Float32Array; memY: Float32Array; foodN: Float32Array; seed: Float32Array; rcd: Float32Array; mature: Float32Array;
   genome: Float32Array;
 
   constructor(cap: number) {
@@ -41,6 +43,9 @@ export class EntityStore {
     this.anim = f();
     this.maxE = f(); this.bmr = f(); this.spSwim = f(); this.spWalk = f(); this.spFly = f();
     this.sense = f(); this.atk = f(); this.def = f(); this.maxSize = f(); this.life = f();
+    this.dx = f(); this.dy = f(); this.crowd = f(); this.carn = f(); this.herb = f(); this.scav = f(); this.filt = f(); this.camo = f();
+    this.thr = new Int32Array(cap).fill(-1); this.thrUid = new Int32Array(cap);
+    this.gx = f(); this.gy = f(); this.fx = f(); this.fy = f(); this.memX = f(); this.memY = f(); this.foodN = f(); this.seed = f(); this.rcd = f(); this.mature = f();
     this.genome = new Float32Array(cap * NG);
   }
 
@@ -52,7 +57,7 @@ export class EntityStore {
     else return -1;
     this.alive++;
     this.uid[s] = this.nextUid++;
-    this.target[s] = -1; this.flags[s] = 0; this.state[s] = 0; this.hurt[s] = 0; this.cd[s] = 0;
+    this.target[s] = -1; this.thr[s] = -1; this.seed[s] = 0; this.rcd[s] = 0; this.crowd[s] = 0; this.flags[s] = 0; this.state[s] = 0; this.hurt[s] = 0; this.cd[s] = 0;
     return s;
   }
   release(s: number) {

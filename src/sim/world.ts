@@ -18,6 +18,8 @@ export class World {
   env: Env;
   nutrients = new Float32Array(CW * CH);
   chem = new Float32Array(CW * CH);
+  /** how much of each coarse block is non-air (nutrient influx weight) */
+  nutFactor = new Float32Array(CW * CH);
   ents!: EntityStore;
   hash!: SpatialHash;
   terrainVersion = 0;
@@ -27,6 +29,9 @@ export class World {
   seed: number;
   /** transient atmospheric dimming from asteroid dust / ash (0 = clear) */
   dust = 0;
+  nutTmp?: Float32Array;
+  /** set by the sim host so low-level code can emit events */
+  ctxRef?: import('./ecology').Ctx;
 
   constructor(idx: number, seed: number) {
     this.idx = idx; this.def = BIOMES[idx]; this.seed = seed;
@@ -51,6 +56,9 @@ export class World {
         if (x >= 0 && x < CW && y >= 0 && y < CH) this.chem[y * CW + x] = Math.max(this.chem[y * CW + x], 1 / (1 + dx * dx + dy * dy * 0.7));
       }
     }
+    this.nutFactor.fill(0);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (this.medium[y * W + x] !== AIR) this.nutFactor[((y / BLOCK) | 0) * CW + ((x / BLOCK) | 0)] += 1 / (BLOCK * BLOCK);
+    for (let i = 0; i < this.nutFactor.length; i++) this.nutFactor[i] = Math.max(this.def.noFloor ? 0.25 : 0.04, this.nutFactor[i]);
     this.recomputeLight();
     this.terrainVersion++;
   }
