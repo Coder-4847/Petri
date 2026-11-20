@@ -35,4 +35,23 @@
 - Entity count of ~7–9k costs ~4–5 ms/tick; fine at 1x–5x, needs the coarse model / LOD at high speed (Phase 3, 8).
 - Many newborn grazers starve (high turnover) — wasteful but regulating; revisit when profiling.
 
-## Next: Phase 3 — Microbial Life and Evolution Engine
+## Phase 3: Microbial Life and Evolution Engine — DONE
+- All 18 biomes exist from the start and are seeded with microbes that fit them (sunlit plankton/mats, vent chemosynthesisers,
+  soil crust + bacteria on land, spore drifters in the sky, detritus feeders everywhere)
+- Detritus field + decomposer microbes close the nutrient loop
+- Population-level coarse model for offscreen biomes and deep time; seamless collapse/rebuild; verified consistent
+- Speciation with procedural Latin names, lineage (`parent`), extinction log, adaptive radiation blueprints (28 body plans)
+- Era milestones evaluated from real species traits; live era timeline with a cosmetic geological clock
+- Speeds: pause / 1x / 5x / 20x (individuals) / 100x (populations) / deep time (~20,000 ticks per second)
+- Environment (Tweak) panel with plain-language hints; Life panel; toasts for eras, speciation and extinction
+- Verified slider steering (grassland, same seed): drier → humidity optimum 0.40→0.17 and waterproofing 0.47→0.74;
+  hotter → temperature optimum 0.52→0.74; colder → 0.29; darker → chemosynthesis appears
+- Verified progression: swamp reaches *Plants & Insects on Land* in ~10 s of deep time; grassland has reached *Megafauna*
+
+### Known issues / tuning notes
+- Era pace in deep time may be too brisk and varies a lot by seed/biome (intended: no two saves alike); revisit in Phase 8.
+- Coarse step costs 1–3 ms with ~40 species per biome; inactive biomes run with time dilation at deep speeds.
+- The individual model is calibrated on small test communities; radiation daughters in the full model sometimes fail to establish.
+- Hominids/civilization need Phase 7 hooks (era index 9+).
+
+## Next: Phase 4 — Procedural Pixel Creatures and Behavior

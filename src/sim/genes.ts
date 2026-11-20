@@ -72,7 +72,7 @@ export function crossover(out: Float32Array, oo: number, a: ArrayLike<number>, a
 export const speedCap = (size: number) => 1.4 + 2.4 * Math.sqrt(size);
 
 export interface Traits {
-  size: number; kind: number; maxE: number; bmr: number; spSwim: number; spWalk: number; spFly: number;
+  speed: number; size: number; kind: number; maxE: number; bmr: number; spSwim: number; spWalk: number; spFly: number;
   sense: number; atk: number; def: number; life: number;
 }
 /** Decode a genome into the cached per-entity trait values used every tick. */
@@ -80,20 +80,30 @@ export function traitsOf(g: ArrayLike<number>, o = 0, t: Traits = {} as Traits):
   const size = 0.12 * Math.pow(250, g[o + G.SIZE]);
   const mass = size * size;
   const cap = speedCap(size);
-  const complexity = 0.45 * (g[o + G.LIMBS] + g[o + G.FINS] + g[o + G.WINGS] * 1.5 + g[o + G.JAWS] + g[o + G.HORNS] * 0.5 + g[o + G.SHELL] * 1.2 + g[o + G.ARMOR] * 1.2 + g[o + G.EYES] * 0.5 + g[o + G.TAIL] * 0.3 + g[o + G.MULTICELL] * 0.5) + 0.3 * (g[o + G.BIOLUM] + g[o + G.VENOM] + g[o + G.ELECTRO]);
+  const complexity = 0.45 * (g[o + G.LIMBS] + g[o + G.FINS] + g[o + G.WINGS] * 1.5 + g[o + G.JAWS] + g[o + G.HORNS] * 0.5 + g[o + G.SHELL] * 1.2 + g[o + G.ARMOR] * 1.2 + g[o + G.EYES] * 0.5 + g[o + G.TAIL] * 0.3 + g[o + G.MULTICELL] * 0.5) + 0.3 * (g[o + G.BIOLUM] + g[o + G.VENOM] + g[o + G.ELECTRO]) + 0.25 * Math.max(g[o + G.VISION], g[o + G.SMELL], g[o + G.VIBRATION]) * (1 + Math.min(1, size) * 0.5);
+  // maintaining unused machinery is wasteful: generalists pay for every extra diet / locomotion mode
+  const dmax = Math.max(g[o + G.PHOTO], g[o + G.CHEMO], g[o + G.HERB], g[o + G.CARN], g[o + G.SCAV], g[o + G.FILTER], g[o + G.PARASITE]);
+  const dsum = g[o + G.PHOTO] + g[o + G.CHEMO] + g[o + G.HERB] + g[o + G.CARN] + g[o + G.SCAV] + g[o + G.FILTER] + g[o + G.PARASITE];
+  const lmax = Math.max(g[o + G.SWIM], g[o + G.WALK], g[o + G.FLY], g[o + G.CRAWL] * 0.6, g[o + G.BURROW] * 0.6);
+  const lsum = g[o + G.SWIM] + g[o + G.WALK] + g[o + G.FLY] + g[o + G.CRAWL] * 0.6 + g[o + G.BURROW] * 0.6;
+  const waste = 1 + 0.9 * (dsum - dmax) + 0.5 * Math.max(0, lsum - lmax - 0.05);
   const brain = 1 + 2.2 * g[o + G.INTEL] * g[o + G.INTEL] * Math.min(1, 0.3 + size * 0.3);
   const metab = 0.5 + g[o + G.METAB];
   t.size = size; t.kind = kindOf(g.constructor === Float32Array ? (g as Float32Array).subarray(o, o + NG) : Array.prototype.slice.call(g, o, o + NG));
-  t.bmr = 0.0026 * Math.pow(mass, 0.75) * metab * (1 + complexity * 0.45) * brain * (1 + 0.5 * g[o + G.ENDOTHERM]) * (1 + 0.04 * g[o + G.MULTICELL]) * (1 - 0.3 * g[o + G.CARN] * (1 - g[o + G.ENDOTHERM]));
+  t.bmr = 0.0026 * Math.pow(mass, 0.75) * metab * (1 + complexity * 0.45 * (1 + 2.5 * Math.max(0, 0.7 - size))) * brain * (1 + 0.5 * g[o + G.ENDOTHERM]) * (1 + 0.04 * g[o + G.MULTICELL]) * (1 - 0.3 * g[o + G.CARN] * (1 - g[o + G.ENDOTHERM])) * waste;
   t.maxE = 9 * mass * (0.7 + 0.6 * g[o + G.REPRO_STRAT]) * (1 + 0.8 * g[o + G.CARN]) + 2 * Math.pow(mass, 0.75);
-  t.spSwim = cap * Math.max(g[o + G.SWIM], 0.08) * (0.75 + 0.4 * g[o + G.FINS] + 0.25 * g[o + G.TAIL]) * 1.3;
+  const act = 1 + 0.25 * g[o + G.ENDOTHERM]; // warm blood = stamina
+  t.spSwim = cap * Math.max(g[o + G.SWIM], 0.08) * (0.75 + 0.4 * g[o + G.FINS] + 0.25 * g[o + G.TAIL]) * 1.3 * act;
   const legs = Math.max(g[o + G.WALK] * (0.6 + 0.4 * g[o + G.LIMBS]), g[o + G.CRAWL] * 0.4);
-  t.spWalk = cap * legs * 0.95;
-  t.spFly = g[o + G.FLY] > 0.25 ? cap * 1.5 * g[o + G.FLY] * (0.4 + 0.6 * g[o + G.WINGS]) : 0;
+  t.spWalk = cap * legs * 0.95 * act;
+  t.spFly = g[o + G.FLY] > 0.25 ? cap * 1.5 * g[o + G.FLY] * (0.4 + 0.6 * g[o + G.WINGS]) * act : 0;
   const vis = g[o + G.VISION] * (0.4 + 0.6 * g[o + G.EYES]);
-  t.sense = 1.8 + size * 1.5 + 14 * Math.max(vis, g[o + G.SMELL] * 0.85, g[o + G.VIBRATION] * 0.6, g[o + G.ELECTRO] * 0.4) * (0.6 + 0.4 * Math.sqrt(size));
+  t.sense = (1 + 0.5 * g[o + G.INTEL]) * (1.8 + size * 1.5 + 14 * Math.max(vis, g[o + G.SMELL] * 0.85, g[o + G.VIBRATION] * 0.6, g[o + G.ELECTRO] * 0.4) * (0.6 + 0.4 * Math.sqrt(size)));
   t.atk = (0.35 + 1.1 * g[o + G.JAWS] + 0.5 * g[o + G.HORNS] + 0.9 * g[o + G.VENOM]) * Math.pow(mass, 0.55) * (0.6 + 0.8 * g[o + G.AGGR]) * (0.5 + 0.5 * Math.max(g[o + G.CARN], 0.3));
   t.def = 1 + 3.2 * (0.55 * g[o + G.ARMOR] + 0.65 * g[o + G.SHELL]) + 0.8 * g[o + G.HORNS];
+  const heavy = 1 / (1 + 0.6 * (g[o + G.ARMOR] + g[o + G.SHELL])); // armour slows you down
+  t.spSwim *= heavy; t.spWalk *= heavy; t.spFly *= heavy;
+  t.speed = Math.max(t.spSwim, t.spWalk, t.spFly);
   t.life = 2400 * (0.3 + 2.6 * g[o + G.LIFESPAN]) * Math.pow(Math.max(size, 0.2), 0.25);
   return t;
 }

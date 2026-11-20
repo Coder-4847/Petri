@@ -8,7 +8,7 @@ import type { World } from './world';
 import type { SpeciesRegistry } from './species';
 import { crossover, mutate, traitsOf, speedCap, type Traits } from './genes';
 
-export interface Ctx { sp: SpeciesRegistry; events: any[]; }
+export interface Ctx { sp: SpeciesRegistry; events: any[]; era?: { reached: number }; }
 
 const DT = 1 / TICK_RATE;
 const scratch: Traits = {} as Traits;
@@ -16,7 +16,7 @@ const MAX_EVENTS = 500;
 export const dbg = { eat: 0, bite: 0, hunt: 0, targets: 0, perceive: 0, noTarget: 0 };
 
 // ------------------------------------------------------------------ helpers
-function cellM(w: World, x: number, y: number): number {
+export function cellM(w: World, x: number, y: number): number {
   const cx = x | 0, cy = y | 0;
   if (cx < 0 || cx >= W) return 5;
   if (y < 0) return AIR;
@@ -28,15 +28,16 @@ function blocked(w: World, x: number, y: number, pore: boolean): boolean {
   const m = cellM(w, x, y);
   return IS_SOLID[m] === 1 && !(pore && IS_PORE[m] === 1);
 }
-function groundBelow(w: World, x: number, y: number): number {
+export function groundBelow(w: World, x: number, y: number): number {
   const cx = Math.max(0, Math.min(W - 1, x | 0));
   for (let cy = Math.max(0, y | 0); cy < H; cy++) if (IS_SOLID[w.medium[cy * W + cx]]) return cy;
   return -1;
 }
-const blockIdx = (x: number, y: number) => Math.max(0, Math.min(CH - 1, (y / BLOCK) | 0)) * CW + Math.max(0, Math.min(CW - 1, (x / BLOCK) | 0));
-function addNut(w: World, x: number, y: number, v: number) { const b = blockIdx(x, y); w.nutrients[b] = Math.min(4, w.nutrients[b] + v); }
+export const blockIdx = (x: number, y: number) => Math.max(0, Math.min(CH - 1, (y / BLOCK) | 0)) * CW + Math.max(0, Math.min(CW - 1, (x / BLOCK) | 0));
+export function addDet(w: World, x: number, y: number, v: number) { const b = blockIdx(x, y); w.detritus[b] = Math.min(8, w.detritus[b] + v); }
+export function addNut(w: World, x: number, y: number, v: number) { const b = blockIdx(x, y); w.nutrients[b] = Math.min(4, w.nutrients[b] + v); }
 
-function localTemp(w: World, x: number, y: number, m: number): number {
+export function localTemp(w: World, x: number, y: number, m: number): number {
   const env = w.env;
   if (IS_WATER[m]) {
     const wt = w.waterTop[Math.max(0, Math.min(W - 1, x | 0))]; const depth = wt >= 0 ? y - wt : 0;
@@ -53,7 +54,7 @@ function localTemp(w: World, x: number, y: number, m: number): number {
 }
 
 // ------------------------------------------------------------------ spawning & death
-export interface SpawnOpts { energyFrac?: number; age?: number; parent?: number; gen?: number; grown?: boolean; }
+export interface SpawnOpts { energyFrac?: number; age?: number; parent?: number; gen?: number; grown?: boolean; noCount?: boolean; }
 
 export function spawn(w: World, ctx: Ctx, species: number, g: ArrayLike<number>, go: number, x: number, y: number, o: SpawnOpts = {}): number {
   w.allocEntities();
@@ -81,7 +82,7 @@ export function spawn(w: World, ctx: Ctx, species: number, g: ArrayLike<number>,
     e.y[i] = gy - e.size[i] * 0.5; e.flags[i] |= 2; // flag 2 = anchored
   } else e.y[i] = y;
   e.x[i] = x; e.memX[i] = x; e.memY[i] = e.y[i];
-  ctx.sp.add(species, 1, w.tick);
+  if (!o.noCount) ctx.sp.add(species, 1, w.tick);
   return i;
 }
 
@@ -110,7 +111,7 @@ export function die(w: World, ctx: Ctx, i: number, cause: string, killer = -1) {
     e.thr[i] = -1; e.target[i] = -1;
     return;
   }
-  addNut(w, e.x[i], e.y[i], (e.energy[i] + 2.5 * size * size) * 0.02);
+  addDet(w, e.x[i], e.y[i], (Math.max(0, e.energy[i]) + 2.5 * size * size) * 0.12);
   e.release(i);
   void killer;
 }
@@ -145,13 +146,15 @@ function updateFields(w: World) {
     tmp[b] = v + (s / c - v) * 0.12;
   }
   for (let b = 0; b < nut.length; b++) nut[b] = Math.min(4, tmp[b]);
+  // detritus slowly mineralises into nutrients on its own; decomposer microbes speed this up
+  for (let b = 0; b < nut.length; b++) { const d = w.detritus[b]; if (d > 0.0001) { const lost = d * 0.012; w.detritus[b] = d - lost; nut[b] = Math.min(4, nut[b] + lost * 0.9); } }
   if (w.dust > 0) { w.dust = Math.max(0, w.dust - 0.0004); if (w.tick % 40 === 0) { w.recomputeLight(); w.terrainVersion++; } }
 }
 
 // ------------------------------------------------------------------ stress / environment fit
-function computeStress(w: World, i: number, m: number): number {
-  const e = w.ents, env = w.env, g = e.genome, o = i * NG;
-  const x = e.x[i], y = e.y[i];
+/** Environmental mismatch (0 = comfortable, 1 = badly stressed) of a genome at a place. Pure: used by both models. */
+export function stressAt(w: World, g: ArrayLike<number>, o: number, x: number, y: number, m: number): number {
+  const env = w.env;
   const inWater = IS_WATER[m] === 1, inAir = m === AIR;
   const T = localTemp(w, x, y, m);
   const tol = 0.07 + 0.35 * g[o + G.TEMP_TOL];
@@ -171,6 +174,9 @@ function computeStress(w: World, i: number, m: number): number {
   const o2 = (inWater ? env.oxygen * (1 - 0.35 * depthN) : inAir ? env.oxygen : env.oxygen * 0.5);
   s += Math.max(0, g[o + G.O2_NEED] - o2) / 0.35;
   return s;
+}
+function computeStress(w: World, i: number, m: number): number {
+  const e = w.ents; return stressAt(w, e.genome, i * NG, e.x[i], e.y[i], m);
 }
 
 // ------------------------------------------------------------------ producers
@@ -193,7 +199,7 @@ function stepProducer(w: World, ctx: Ctx, i: number) {
     const x = e.x[i], y = e.y[i];
     const cx0 = Math.max(0, ((x - r) / BLOCK) | 0), cx1 = Math.min(h.gw - 1, ((x + r) / BLOCK) | 0), cy0 = Math.max(0, ((y - r) / BLOCK) | 0), cy1 = Math.min(h.gh - 1, ((y + r) / BLOCK) | 0);
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) for (let j = h.head[cy * h.gw + cx]; j >= 0; j = h.next[j]) {
-      if (j !== i && e.kind[j] === K_PRODUCER) { const dx = e.x[j] - x, dy = e.y[j] - y; if (dx * dx + dy * dy < r * r) c += 1 + e.size[j] * 0.4; }
+      if (j !== i && e.kind[j] === K_PRODUCER) { const dx = e.x[j] - x, dy = e.y[j] - y; if (dx * dx + dy * dy < r * r) c += (e.size[j] > e.size[i] * 1.15 ? 1.7 : 0.7) + e.size[j] * 0.3; }
     }
     e.crowd[i] = c;
   }
@@ -207,7 +213,7 @@ function stepProducer(w: World, ctx: Ctx, i: number) {
   const b = blockIdx(e.x[i], e.y[i]);
   const N = w.nutrients[b]; const Nf = N / (N + 0.12);
   const sz = e.size[i];
-  const sg = Math.pow(sz, 0.6) * (0.35 + 0.65 * grow);
+  const sg = Math.pow(sz, 1.15) * (0.35 + 0.65 * grow) * 3.2; // area-like scaling: per-area production stays ~constant as plants get bigger
   let gain = 0;
   const photo = g[o + G.PHOTO], chemo = g[o + G.CHEMO];
   if (photo > 0.2) gain += photo * L * (0.3 + 0.7 * Nf) * 0.02;
@@ -310,7 +316,7 @@ function stepCarcass(w: World, ctx: Ctx, i: number) {
   else { e.vy[i] = 0; const gy = groundBelow(w, e.x[i], e.y[i]); if (gy >= 0 && e.y[i] + hb > gy) e.y[i] = gy - hb; }
   if (e.state[i] === 0) {
     const rate = 0.0011 * (0.4 + env.temp * 1.6) * (IS_WATER[m] ? 0.8 : 1);
-    const lost = e.energy[i] * rate; e.energy[i] -= lost; addNut(w, e.x[i], e.y[i], lost * 0.025);
+    const lost = e.energy[i] * rate; e.energy[i] -= lost; addDet(w, e.x[i], e.y[i], lost * 0.12);
     if (e.energy[i] < e.maxE[i] * 0.07 || e.energy[i] < 0.3) { e.state[i] = 1; e.energy[i] = 0; } // bones
   } else if (e.age[i] > 5200) e.release(i);
 }
@@ -337,6 +343,12 @@ function stepAnimal(w: World, ctx: Ctx, i: number) {
     if (inWater) { const gills = g[o + G.GILLS]; if (gills < 0.5) { e.breath[i] -= (0.5 - gills) * 2 * 0.004 / (1 + size * 0.08); } else e.breath[i] = Math.min(1, e.breath[i] + 0.03); }
     else if (m === AIR) { const air = Math.max(g[o + G.LUNGS], size < 1.6 ? g[o + G.CUTICLE] * 0.8 : 0); if (air < 0.5) e.breath[i] -= (0.5 - air) * 2 * 0.009; else e.breath[i] = Math.min(1, e.breath[i] + 0.03); }
     if (e.breath[i] <= 0) { e.breath[i] = 0; e.health[i] -= 0.02; }
+  }
+
+  // ---- decomposer microbes absorb detritus directly and recycle it into nutrients
+  if (e.scav[i] > 0.3 && e.maxSize[i] < 0.45) {
+    const b = blockIdx(e.x[i], e.y[i]); const d = w.detritus[b];
+    if (d > 0.001) { const take = Math.min(d, 0.012 * (0.4 + e.size[i] * 2) * d / (d + 0.4)); w.detritus[b] = d - take; e.energy[i] = Math.min(e.maxE[i], e.energy[i] + take * 5 * e.scav[i]); w.nutrients[b] = Math.min(4, w.nutrients[b] + take * 0.6); }
   }
 
   // ---- behaviour -> desired heading
@@ -519,7 +531,7 @@ function chooseBehavior(w: World, i: number, m: number): number {
 }
 
 // -------------------------------------------------- locomotion & physics
-function locomote(w: World, i: number, m: number, urgency: number): number {
+export function locomote(w: World, i: number, m: number, urgency: number): number {
   const e = w.ents, env = w.env;
   const size = e.size[i], hb = Math.min(size * 0.22, 1.6), cap = speedCap(size);
   const g = e.genome, o = i * NG;
@@ -639,3 +651,19 @@ function interact(w: World, ctx: Ctx, i: number) {
   } else if (e.health[t] < 0.35 && rng.next() < 0.5) { e.thr[t] = i; e.thrUid[t] = e.uid[i]; }
 }
 void S_FORAGE; void S_HUNT; void S_FLEE;
+
+/** Deep-time visual liveliness: individuals just drift about (no metabolism, no deaths). */
+export function cosmeticStep(w: World) {
+  if (!w.ents) return;
+  const e = w.ents, rng = w.rng; w.tick++;
+  for (let i = 0; i < e.hi; i++) {
+    const k = e.kind[i]; if (k === K_FREE || k === K_CARCASS) continue;
+    if (e.flags[i] & 2) continue; // rooted plants stay put
+    if ((w.tick + i) % 50 === 0) { const a = rng.next() * 6.283; e.dx[i] = Math.cos(a); e.dy[i] = Math.sin(a) * 0.55; }
+    const m = cellM(w, e.x[i], e.y[i]);
+    if (k === K_PRODUCER) { moveProducer(w, i, m); continue; }
+    e.state[i] = S_WANDER;
+    locomote(w, i, m, 0.55);
+    e.anim[i] += 0.12; if (e.anim[i] >= 4) e.anim[i] -= 4;
+  }
+}

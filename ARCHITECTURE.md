@@ -68,6 +68,28 @@ suffocation via a breath reserve) → **energy** (basal metabolism ∝ mass^0.75
 * `tools/harness.ts` runs the real sim headlessly: `npx tsx tools/harness.ts reef4 60000 reef 7 --diag`.
   `tools/physics.ts` checks drowning / suffocation / falling.
 
+## Two simulation models, one world
+
+Every biome exists from the first moment (`Sim.start`) and starts microbial (`sim/seed.ts`).
+
+* **Full model** (`ecology.ts`): individuals. Used for the active biome at 1x–20x.
+* **Coarse model** (`coarse.ts`): each species is a population count + a mean genome. Habitat is sampled at ~28
+  representative points (water depth bands, land surface, high air, soil pores, vents); species spread over them by
+  stress-tolerance and breathing/locomotion fit. Producers share light and nutrients (similar sizes compete hardest,
+  taller plants shade shorter ones), herbivores share producer energy, predators use a saturating functional
+  response with satiation and refugia, decomposers eat the detritus pool. One coarse step = 50 ticks. Used for every
+  biome you are not watching and for 100x / deep-time on the active biome (individuals are then redrawn cosmetically).
+* `collapseWorld` / `expandWorld` convert between them without changing registry counts (checked: diff = 0).
+* **Evolution** has three layers: point/macro mutation + `SPECIATION_DIST` in the full model; payoff-guided
+  adaptation of tolerance genes (so sliders steer evolution) in the coarse model; and **adaptive radiation**
+  (`radiation.ts`): a library of ecological blueprints (colonial algae → copepods → jawed fish → insects, moss, trees →
+  amphibians, reptiles → megafauna → warm-blooded birds and mammals → clever social hominids). A blueprint needs a
+  suitable living ancestor and food; it spawns a small daughter lineage that keeps its parent's tolerances, and the
+  population dynamics decide whether it survives. This works in both models at any speed.
+* **Eras** (`eras.ts`) are milestone scores over living species (size, locomotion, jaws, limbs, lungs, endothermy,
+  intelligence ...); the timeline bar shows progress toward the next one.
+* Tools: `tools/evo.ts` (deep-time experiments, `--env=humidity=0.1@3000`), `tools/simtest.ts` (drive the real Sim host).
+
 ## Rendering
 
 * `terrain.ts` paints solids into a 4-texel-per-cell canvas once per terrain change, and draws water/lava as a

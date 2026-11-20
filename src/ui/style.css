@@ -68,3 +68,30 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   .dock .btn { min-width: 52px; }
   .logo { letter-spacing: 2px; }
 }
+
+/* ---- sliders ---- */
+.sliders { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px 22px; }
+.slider { display: flex; flex-direction: column; gap: 3px; }
+.sl-top { display: flex; justify-content: space-between; font-size: 13px; }
+.sl-name { color: var(--text); } .sl-val { color: var(--dim); }
+.slider input[type=range] { width: 100%; height: 14px; background: transparent; accent-color: var(--accent); margin: 0; cursor: pointer; }
+.sl-hint { font-size: 11px; color: var(--faint); min-height: 14px; line-height: 1.25; }
+.sl-hint.changed { color: var(--accent); }
+
+/* ---- life list ---- */
+.life-head, .life-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 60px 60px; gap: 8px; align-items: center; font-size: 12px; padding: 3px 4px; }
+.life-head { color: var(--faint); border-bottom: 1px solid var(--line); margin-bottom: 4px; letter-spacing: 1px; text-transform: uppercase; font-size: 10px; }
+.life-row:hover { background: rgba(255,255,255,.04); }
+.life-row .nm { display: flex; align-items: center; gap: 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-style: italic; }
+.life-row .nm i { width: 9px; height: 9px; display: inline-block; flex: none; }
+.life-row .rl { color: var(--dim); }
+.life { max-height: 40vh; overflow: auto; }
+
+/* ---- toasts ---- */
+.toasts { position: absolute; top: calc(var(--bar) + 12px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; z-index: 5; }
+.toast { background: var(--panel); border: 1px solid var(--line2); border-left: 3px solid var(--accent-dim); padding: 7px 14px; opacity: 0; transform: translateY(-8px); transition: opacity .35s, transform .35s; backdrop-filter: blur(8px); max-width: min(560px, 92vw); text-align: center; }
+.toast.in { opacity: 1; transform: none; }
+.toast .tt { font-size: 13px; } .toast .ts { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.toast.era { border-left-color: var(--accent); border-color: var(--accent-dim); padding: 10px 20px; } .toast.era .tt { color: var(--accent); font-size: 15px; letter-spacing: 1px; }
+.toast.extinct { border-left-color: var(--bad); } .toast.species { border-left-color: var(--warn); }
+.era-leader { color: var(--faint); }

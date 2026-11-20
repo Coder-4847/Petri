@@ -7,7 +7,7 @@ import { G } from '../shared/constants';
 
 export const MAX_SPECIES = 4096;
 /** Genetic distance (from the species founder) at which a lineage is considered a new species. */
-export const SPECIATION_DIST = 0.055;
+export const SPECIATION_DIST = 0.085;
 
 export interface ExtinctionRecord { id: number; name: string; tick: number; peak: number; }
 

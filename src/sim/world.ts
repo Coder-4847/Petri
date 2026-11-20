@@ -18,6 +18,8 @@ export class World {
   env: Env;
   nutrients = new Float32Array(CW * CH);
   chem = new Float32Array(CW * CH);
+  /** dead organic matter awaiting decomposers (coarse blocks) */
+  detritus = new Float32Array(CW * CH);
   /** how much of each coarse block is non-air (nutrient influx weight) */
   nutFactor = new Float32Array(CW * CH);
   ents!: EntityStore;
@@ -29,6 +31,8 @@ export class World {
   seed: number;
   /** transient atmospheric dimming from asteroid dust / ash (0 = clear) */
   dust = 0;
+  mode: 'full' | 'coarse' = 'full';
+  cs?: import('./coarse').CoarseState;
   nutTmp?: Float32Array;
   /** set by the sim host so low-level code can emit events */
   ctxRef?: import('./ecology').Ctx;
