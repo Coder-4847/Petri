@@ -109,6 +109,14 @@ Every biome exists from the first moment (`Sim.start`) and starts microbial (`si
 - UI: `ui/menu.ts` (title + slot list), `ui/codex.ts`, `ui/inspector.ts`, `ui/stats.ts`, `ui/toolbar.ts` (active tool chip + reticle).
   `Shell.addPanel` registers new dock panels.
 
+## Civilization layer (Phase 7)
+- `sim/civ.ts` is a self-contained state machine: `stepCiv(civ, rng, years, thinkers)` returns UI events
+  (`choice`, `note`, `ending`); `answerCiv` applies the player's pick. `sim/civfx.ts` connects it to the biosphere
+  (mass kills, dust, env nudges, hunting pressure). The Sim host converts simulated ticks to years
+  (`YEARS_PER_TICK`), pauses on choices/endings and resumes with `resume`.
+- Content lives in `data/civ.ts` (dilemmas + endings). Hazard warnings are built in `civ.ts` (`HAZARDS`).
+- UI: `ui/civ.ts` (Society panel, choice modal), `ui/endings.ts` (scene painters + epilogue), `render/settlements.ts`.
+
 ## Rendering
 
 * `terrain.ts` paints solids into a 4-texel-per-cell canvas once per terrain change, and draws water/lava as a

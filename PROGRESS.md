@@ -112,4 +112,31 @@
 - Mutagen mutates genomes in place but cached per-individual traits only refresh in offspring.
 - Food-web edges are a heuristic from the same edibility rules the simulation uses (not a log of actual meals).
 
-## Next: Phase 7 — Civilization, Choices, Endings
+## Phase 7: Civilization, Choices, Endings — DONE
+- **Civilization engine** (`sim/civ.ts`, `data/civ.ts`): starts when a clever, social species (era 9, "Hominids" → "Civilization")
+  has 8+ individuals. One global state (population, technology, nature, climate stress, tension, stability, AI risk,
+  disease, space, defence…) advances in "years" (5 years per second at 1x; 10,000 BCE → near future and beyond).
+  Eras 9–11 follow technology (Civilization / Modern World / Near Future).
+- **23 dilemmas** (agriculture, domestication, cities, writing, empires, plague, sail, science, coal, vaccines, atom, rockets,
+  planetary watch, grid, wildlife, climate, AI, biotech, orbit…). Each pauses time and offers 2–4 options with a qualitative
+  hint; effects are declarative. Some can return later if the player passed on them (rockets, watch, grid…).
+- **13 endings** with animated pixel scenes (`ui/endings.ts`): asteroid, nuclear, climate, supervolcano, pandemic, runaway AI,
+  orbit loss, solar flare, rogue star, extinction (bad); ecological balance, space colonisation, transcendence (good).
+  Hazards are scheduled at random years, give a warning where technology allows, and can be averted by earlier
+  decisions (planetary watch, hardened grid, space programme, vaccines…). Emergent endings follow from the state
+  (nuclear war needs weapons and tension; climate needs sustained warming; AI needs an unrestrained path…).
+- Consequences hit the real world: mass die-offs, dust, temperature and toxicity shifts, and the civilized species
+  can be wiped; positive endings leave it intact. After an ending the player can keep exploring the sandbox.
+- **Society panel**: population, age, bars for technology/nature/climate/tension/stability/AI/space, doom watch, history log.
+- **Settlements** (`render/settlements.ts`): 14 pixel building types (hut, field, house, granary, mill, hall, brick house,
+  factory, radio mast, office, cooling tower, skyscraper, solar field, eco-tower) placed on dry ground; number and style follow
+  population and technology; they turn grey and slump after a civilization-ending catastrophe.
+- Balance verified by simulation (`/tmp` scripts, 60–80 runs per strategy): every ending is reachable; careless play usually
+  ends in a hazard, prepared play reaches balance or space; merging with AI needs wisdom for transcendence.
+- QA hooks: worker message `dev` (`civ` jumps to hominids, `civstate` patches civ variables); `#ending:<id>` previews a scene.
+
+### Known issues
+- Pacing at deep-time speeds: a dilemma pauses the game, so very fast speeds produce frequent pauses late in the game.
+- Settlements are cosmetic; they don't react to individual creatures. Night lighting for cities arrives in Phase 8.
+
+## Next: Phase 8 — Polish, Audio, Performance, Release

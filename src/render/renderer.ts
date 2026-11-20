@@ -8,6 +8,7 @@ import { Background } from './background';
 import { Ambient } from './ambient';
 import { CreatureLayer } from './creatures';
 import { Lighting } from './lighting';
+import { Settlements } from './settlements';
 import { Fx } from './fx';
 import { hexR, hexG, hexB } from './util';
 
@@ -23,6 +24,7 @@ export class Renderer {
   creatures = new CreatureLayer();
   lighting = new Lighting();
   fx = new Fx();
+  settlements = new Settlements();
   def: BiomeDef | null = null;
   medium: Uint8Array = new Uint8Array(W * H);
   time = 0;
@@ -62,13 +64,14 @@ export class Renderer {
   setGore(on: boolean) { this.fx.gore = on; this.creatures.gore = on; }
 
   setWorld(m: WorldMsg) {
+    this.settlements.setTerrain(m.surfaceY, m.waterTop);
     const def = BIOME_BY_ID[m.biome]; const changed = this.def?.id !== def.id;
     this.def = def; this.medium = m.medium;
     if (changed) {
       this.terrain.build(def, m.medium, m.light);
       // water meshes sit between ground and creatures (back) / above creatures (front)
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       const horizon = def.terrain.water > 0 ? def.terrain.water * H : Math.min(...Array.from(m.surfaceY).filter((v) => v < H), H * 0.5);
       this.bg.build(def, horizon);
       this.ambient.setVents(m.vents); this.ambient.setWorld(def, m.medium); this.fx.setWorld(m.medium);
@@ -77,7 +80,7 @@ export class Renderer {
     } else {
       this.terrain.build(def, m.medium, m.light); // terrain edited (power / regen): repaint
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       this.ambient.setWorld(def, m.medium);
     }
   }

@@ -33,7 +33,7 @@ export function snapshot(sim: Sim) {
   return {
     v: SAVE_VERSION, seed: sim.seed, rng: sim.rng.state(), active: sim.active, totalTicks: sim.totalTicks,
     era: { ...sim.era, history: sim.era.history.map((h) => ({ ...h })) }, history: sim.history.slice(-300),
-    found: [...sim.found], spawned: { ...(sim.ctx.spawned ?? {}) }, timed: sim.timed.map((t) => ({ ...t })), config: { ...sim.config },
+    found: [...sim.found], civ: JSON.parse(JSON.stringify(sim.civ)), civTicks: sim.civTicks, spawned: { ...(sim.ctx.spawned ?? {}) }, timed: sim.timed.map((t) => ({ ...t })), config: { ...sim.config },
     species: { list: sp.list.map((s) => ({ ...s })), founders, count: sp.count.slice(0, sp.list.length), taken: [...sp.taken], extinctions: sp.extinctions.map((x) => ({ ...x })) },
     worlds: sim.worlds.map((w) => ({
       tick: w.tick, env: { ...w.env }, nutrients: w.nutrients, chem: w.chem, detritus: w.detritus, dust: w.dust, mode: w.mode, rng: w.rng.state(), seeded: w.seeded,
@@ -54,7 +54,8 @@ export function restore(sim: Sim, d: SaveData) {
   sim.hookRegistry();
   sim.rng.setState(d.rng); sim.era = { ...d.era, history: d.era.history.map((h) => ({ ...h })) }; sim.ctx.era = sim.era;
   sim.history = d.history.slice(); sim.found = new Set(d.found); sim.ctx.spawned = { ...d.spawned }; sim.timed = d.timed.map((t) => ({ ...t })); sim.config = { ...sim.config, ...d.config };
-  sim.totalTicks = d.totalTicks;
+  sim.totalTicks = d.totalTicks; if ((d as any).civ) { sim.civ = JSON.parse(JSON.stringify((d as any).civ)); sim.civTicks = (d as any).civTicks ?? 0;
+    const c = sim.civ; if (c.pending) { if (c.pending.kind === 'choice') { delete c.seen[c.pending.id]; c.nextChoice = c.year; } else { const h = c.hazards.find((x) => x.id === c.pending!.id); if (h) h.warned = false; else c.nextPandemic = 0; } c.pending = null; } }
   d.worlds.forEach((wd, i) => {
     const w = sim.worlds[i];
     w.tick = wd.tick; w.env = { ...wd.env }; w.nutrients.set(wd.nutrients); w.chem.set(wd.chem); w.detritus.set(wd.detritus); w.dust = wd.dust; w.mode = wd.mode; w.rng.setState(wd.rng); w.seeded = wd.seeded;

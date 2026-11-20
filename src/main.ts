@@ -12,10 +12,17 @@ import { TEMPLATE_BY_ID } from './data/templates';
 import { BIOMES } from './data/biomes';
 import { ERAS } from './data/eras';
 import { icon } from './ui/icons';
+import { CivPanel, ChoiceModal, fmtYear } from './ui/civ';
+import { EndingScreen } from './ui/endings';
+import { ENDINGS } from './data/civ';
 import type { FromWorker } from './shared/protocol';
 
 async function boot() {
   if (location.hash.startsWith('#gallery')) { const { showGallery } = await import('./ui/gallery'); showGallery(); return; }
+  if (location.hash.startsWith('#ending')) { // dev preview of an ending scene: #ending:asteroid
+    const es = new EndingScreen(); document.getElementById('boot')?.classList.add('gone');
+    es.show({ id: location.hash.split(':')[1] || 'balance', summary: { year: 2431, peakPop: 9400, name: 'Hominids' }, alive: 412, species: 530, choices: [{ title: 'x', pick: 'y' }] }); return;
+  }
   const stage = document.getElementById('stage')!;
   const renderer = new Renderer();
   await renderer.init(stage);
@@ -78,6 +85,13 @@ async function boot() {
   const statsUi = new Stats(); statsUi.requestWeb = () => send({ t: 'web' });
   shell.addPanel('stats', 'chart', 'Stats', statsUi.el, (open) => statsUi.setVisible(open));
 
+  // ---- civilization
+  const civPanel = new CivPanel(); shell.addPanel('civ', 'city', 'Society', civPanel.el);
+  const choiceModal = new ChoiceModal(); choiceModal.onAnswer = (i) => send({ t: 'answer', index: i });
+  const endings = new EndingScreen();
+  endings.onContinue = () => { send({ t: 'speed', v: 1 }); shell.setSpeed(1, false); };
+  endings.onTitle = async () => { await refreshSlots(); title.show(slots, slot); };
+
   // ---- worlds (save slots)
   const hooks: SlotHooks = {
     newGame: (s, name, biome) => newGame(s, name, biome),
@@ -128,7 +142,7 @@ async function boot() {
   }
 
   // ---- starting / loading
-  function resetViews() { renderer.creatures.reset(); renderer.follow = null; inspector.close(); statsUi.clear(); tool.set({ kind: 'inspect' }); }
+  function resetViews() { choiceModal.hide(); endings.hide(); renderer.creatures.reset(); renderer.follow = null; inspector.close(); statsUi.clear(); tool.set({ kind: 'inspect' }); }
   function newGame(s: number, name: string, biome: string) {
     slot = s; slotName = name; playSec = 0; inGame = true; resetViews();
     const b = biome === 'random' ? BIOMES[(Math.random() * BIOMES.length) | 0].id : biome;
@@ -149,7 +163,9 @@ async function boot() {
   let lastEnvBiome = '';
   function onStats(s: any) {
     stats = s;
-    shell.setEra(s.era.reached, s.era.progress, `${s.era.clock >= 10 ? Math.round(s.era.clock).toLocaleString() : s.era.clock.toFixed(2)} Ma`);
+    shell.setEra(s.era.reached, s.era.progress, s.civ ? fmtYear(s.civ.year) : `${s.era.clock >= 10 ? Math.round(s.era.clock).toLocaleString() : s.era.clock.toFixed(2)} Ma`);
+    civPanel.update(s.civ);
+    renderer.settlements.set(s.civ ? { pop: s.civ.pop, tech: s.civ.tech } : null, !!(s.civ?.finished && s.civ.ending && ENDINGS[s.civ.ending]?.wipeCiv));
     if (s.biome !== lastEnvBiome) { lastEnvBiome = s.biome; shell.setBiome(s.biome); shell.setEnv(s.env); }
     const rows = Object.entries(s.counts as Record<string, number>).filter(([, n]) => n > 0).map(([id, pop]) => { const i = renderer.creatures.info.get(+id); return i ? { id: +id, name: i.name, color: i.color, role: roleOf(i.genome), size: 0.12 * Math.pow(250, i.genome[0]), pop } : null; }).filter(Boolean) as any[];
     statsUi.push(rows, s.species);
@@ -174,6 +190,9 @@ async function boot() {
         inspector.update(m.data); break;
       case 'web': statsUi.setWeb(m); break;
       case 'savedata': { const auto = pendingSaves.get(m.token) ?? false; pendingSaves.delete(m.token); storeSave(m.slot, m.data, auto); break; }
+      case 'choice': shell.setSpeed(0, false); shell.closePanels(); choiceModal.show(m); break;
+      case 'resume': shell.setSpeed(m.speed, false); break;
+      case 'ending': shell.setSpeed(0, false); shell.closePanels(); endings.show({ id: m.id, def: m.def, summary: m.summary, choices: m.choices, alive: m.alive, species: m.species }); break;
       case 'loaded': shell.setBiome(m.biome); lastEnvBiome = ''; break;
     }
   };
