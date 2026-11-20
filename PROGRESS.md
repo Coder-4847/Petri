@@ -139,4 +139,20 @@
 - Pacing at deep-time speeds: a dilemma pauses the game, so very fast speeds produce frequent pauses late in the game.
 - Settlements are cosmetic; they don't react to individual creatures. Night lighting for cities arrives in Phase 8.
 
-## Next: Phase 8 — Polish, Audio, Performance, Release
+## Phase 8: Polish, Audio, Performance, Release — DONE
+- **Procedural audio** (`audio/audio.ts`): per-biome ambience (filtered noise layers + chirps, frogs, bubbles, crackle), generative
+  music that changes scale, root and density with the era, synthesized effects (UI, toasts, powers, impacts, endings), distance-attenuated
+  in-world hits and deaths, muffling under water. Volume, music and effects toggles in Settings.
+- **Lighting**: additive glow layer (`render/glow.ts`) for bioluminescent creatures, lava and hydrothermal vents.
+- **Quality setting** (Low / Medium / High): ambient particle density, glows and render resolution.
+- **Tips** (`ui/hints.ts`): seven one-time hints, switchable off.
+- **Touch**: zoom buttons, larger tap targets, dock that fits 390 px wide screens; pinch and drag already supported.
+- **Performance**: sim is ~1.4 µs per creature per tick (≈7 ms at 6,300 creatures, in the worker); JS render cost ≈1 ms per frame with 2,400 visible
+  creatures (ParticleContainer atlas batching, LOD dots when tiny, culling by view). Frame rate in the headless test is limited by software GL only.
+- Smoke-tested all 18 biomes with no console errors; save, load, export and import round-trip verified.
+- README written; GitHub Pages workflow in place.
+
+### Known issues / ideas
+- Hydrothermal vents stay producer/decomposer-only for long stretches (consumers arrive by dispersal).
+- Era pacing in deep time varies a lot by seed (intended, but may feel slow or fast).
+- Night lighting for cities and a day/night cycle are not implemented.

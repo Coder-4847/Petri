@@ -117,6 +117,11 @@ Every biome exists from the first moment (`Sim.start`) and starts microbial (`si
 - Content lives in `data/civ.ts` (dilemmas + endings). Hazard warnings are built in `civ.ts` (`HAZARDS`).
 - UI: `ui/civ.ts` (Society panel, choice modal), `ui/endings.ts` (scene painters + epilogue), `render/settlements.ts`.
 
+## Audio & lighting (Phase 8)
+- `audio/audio.ts` builds everything from oscillators and one looping noise buffer: ambience layers per biome mix, a chord/melody scheduler
+  keyed to the era, one-shot effects, and a shared convolution reverb. It starts on the first user gesture.
+- `render/glow.ts` is an additive ParticleContainer; creatures with the `glow` sprite flag, lava columns and vents push soft light into it each frame.
+
 ## Rendering
 
 * `terrain.ts` paints solids into a 4-texel-per-cell canvas once per terrain change, and draws water/lava as a

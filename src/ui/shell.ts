@@ -135,18 +135,25 @@ export class Shell {
   private settingEls = new Map<string, HTMLElement>();
   private buildSettingsPanel() {
     const p = el('div', 'panel narrow'); p.innerHTML = `<h3>Settings</h3>`;
-    const row = (key: 'gore' | 'debug' | 'encounters' | 'autosave', label: string, hint: string) => {
+    const row = (key: 'gore' | 'debug' | 'encounters' | 'autosave' | 'music' | 'sfx' | 'hints', label: string, hint: string) => {
       const r = el('label', 'setting'); r.innerHTML = `<span><b>${label}</b><i>${hint}</i></span><button class="tog"></button>`;
       const b = r.querySelector('button')!; b.onclick = () => { (settings as any)[key] = !(settings as any)[key]; saveSettings(); this.syncSettingsUi(); this.hooks.onSettings(); if (key === 'debug') this.debugEl.style.display = settings.debug ? '' : 'none'; };
       this.settingEls.set(key, b); p.appendChild(r);
     };
+    const vol = el('div', 'setting'); vol.innerHTML = `<span><b>Volume</b><i>Master volume for music, ambience and effects.</i></span><input type="range" min="0" max="100" step="1" style="width:130px;accent-color:var(--accent)">`;
+    const vi = vol.querySelector('input')!; vi.value = String(Math.round(settings.volume * 100)); vi.oninput = () => { settings.volume = +vi.value / 100; saveSettings(); this.hooks.onSettings(); }; p.appendChild(vol);
+    row('music', 'Music', 'Slow generative music that follows the era.'); row('sfx', 'Sound effects', 'Impacts, chimes and powers.');
+    const q = el('div', 'setting'); q.innerHTML = `<span><b>Graphics</b><i>Lower it on slow devices: fewer particles and glows.</i></span><span class="seg">${['Low', 'Medium', 'High'].map((n, i) => `<button data-q="${i}">${n}</button>`).join('')}</span>`;
+    q.querySelectorAll<HTMLElement>('button').forEach((b) => (b.onclick = () => { settings.quality = +b.dataset.q!; saveSettings(); this.syncSettingsUi(); this.hooks.onSettings(); })); p.appendChild(q); this.qualityEl = q;
     row('gore', 'Gore', 'Blood, gibs, bones and wounds when creatures are hurt or killed.');
     row('encounters', 'Random encounters', 'Storms, outbreaks, migrations and strangers now and then.');
     row('autosave', 'Autosave', 'Saves to the current slot every couple of minutes.');
+    row('hints', 'Tips', 'Short hints while you learn the controls.');
     row('debug', 'Debug overlay', 'Frame rate, entity counts and simulation timing. Shortcut: `');
     this.root.appendChild(p); this.panels.set('settings', p); this.syncSettingsUi();
   }
-  syncSettingsUi() { this.settingEls.forEach((b, k) => b.classList.toggle('on', (settings as any)[k])); }
+  private qualityEl?: HTMLElement;
+  syncSettingsUi() { this.settingEls.forEach((b, k) => b.classList.toggle('on', (settings as any)[k])); this.qualityEl?.querySelectorAll<HTMLElement>('button').forEach((b) => b.classList.toggle('on', +b.dataset.q! === settings.quality)); }
 
   // ---- environment sliders
   private buildTweakPanel() {

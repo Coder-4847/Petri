@@ -15,6 +15,9 @@ import { icon } from './ui/icons';
 import { CivPanel, ChoiceModal, fmtYear } from './ui/civ';
 import { EndingScreen } from './ui/endings';
 import { ENDINGS } from './data/civ';
+import { audio } from './audio/audio';
+import { Hints } from './ui/hints';
+import { IS_WATER, W } from './shared/constants';
 import type { FromWorker } from './shared/protocol';
 
 async function boot() {
@@ -35,7 +38,7 @@ async function boot() {
   let slot = 0; // 0 = playing without a save slot
   let slotName = 'Untitled';
   let playSec = 0;
-  let inGame = false;
+  let inGame = false; let sessionSec = 0;
   let slots: (SaveMeta | null)[] = [];
   const refreshSlots = async () => { slots = await listSlots(); worldList.render(slots, slot); if (title.el.classList.contains('open')) title.list.render(slots, slot); };
 
@@ -43,11 +46,22 @@ async function boot() {
     onSpeed: (v) => send({ t: 'speed', v }),
     onBiome: (id) => send({ t: 'biome', id }),
     onEnv: (key, value) => send({ t: 'env', key, value }),
-    onSettings: () => { renderer.setGore(settings.gore); send({ t: 'cfg', config: { encounters: settings.encounters } }); },
+    onSettings: () => { renderer.setGore(settings.gore); send({ t: 'cfg', config: { encounters: settings.encounters } }); applyAudio(); renderer.setQuality(settings.quality); },
   });
 
+  function applyAudio() { audio.volume = settings.volume; audio.music = settings.music; audio.sfx = settings.sfx; if (audio.ctx) { audio.setVolume(settings.volume); audio.setMusic(settings.music); audio.setSfx(settings.sfx); } }
+  applyAudio(); renderer.setQuality(settings.quality);
+  const wake = () => { audio.start(); applyAudio(); audio.setBiome(lastEnvBiome || 'reef'); };
+  window.addEventListener('pointerdown', wake, { once: true }); window.addEventListener('keydown', wake, { once: true });
+  document.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest?.('button')) audio.ui(); });
+  setInterval(() => { const c = renderer.cam, x = c.x | 0, y = c.y | 0; audio.setUnderwater(x >= 0 && x < W && y >= 0 && IS_WATER[renderer.medium[y * W + x]] === 1); audio.setSpeed(shell.speed); }, 400);
   renderer.onViewChange = (v) => send({ t: 'view', ...v });
   renderer.setGore(settings.gore);
+
+  // touch devices get zoom buttons (pinch also works)
+  const zc = document.createElement('div'); zc.className = 'zoomctl'; zc.innerHTML = `<button aria-label="Zoom in">+</button><button aria-label="Zoom out">−</button>`;
+  (zc.children[0] as HTMLElement).onclick = () => renderer.cam.zoomAt(renderer.cam.sw / 2, renderer.cam.sh / 2, 1.4); (zc.children[1] as HTMLElement).onclick = () => renderer.cam.zoomAt(renderer.cam.sw / 2, renderer.cam.sh / 2, 1 / 1.4);
+  shell.root.appendChild(zc);
 
   // ---- tools: inspect / place / powers
   const tool = new ToolUI(shell.root, stage, () => renderer.cam.zoom);
@@ -159,12 +173,12 @@ async function boot() {
   }
 
   // ---- stats
-  const roleOf = (g: number[]) => (g[18] >= Math.max(g[21], g[22], g[23], g[20], g[24]) && g[18] > 0.35) || g[19] > 0.4 ? 'producer' : g[22] > 0.4 ? 'predator' : g[21] > 0.4 && g[22] > 0.25 ? 'omnivore' : g[21] > 0.4 ? 'grazer' : g[23] > 0.4 ? 'decomposer' : g[20] > 0.4 ? 'filter feeder' : 'consumer';
   let lastEnvBiome = '';
+  const roleOf = (g: number[]) => (g[18] >= Math.max(g[21], g[22], g[23], g[20], g[24]) && g[18] > 0.35) || g[19] > 0.4 ? 'producer' : g[22] > 0.4 ? 'predator' : g[21] > 0.4 && g[22] > 0.25 ? 'omnivore' : g[21] > 0.4 ? 'grazer' : g[23] > 0.4 ? 'decomposer' : g[20] > 0.4 ? 'filter feeder' : 'consumer';
   function onStats(s: any) {
     stats = s;
     shell.setEra(s.era.reached, s.era.progress, s.civ ? fmtYear(s.civ.year) : `${s.era.clock >= 10 ? Math.round(s.era.clock).toLocaleString() : s.era.clock.toFixed(2)} Ma`);
-    civPanel.update(s.civ);
+    civPanel.update(s.civ); audio.setEra(s.era.reached);
     renderer.settlements.set(s.civ ? { pop: s.civ.pop, tech: s.civ.tech } : null, !!(s.civ?.finished && s.civ.ending && ENDINGS[s.civ.ending]?.wipeCiv));
     if (s.biome !== lastEnvBiome) { lastEnvBiome = s.biome; shell.setBiome(s.biome); shell.setEnv(s.env); }
     const rows = Object.entries(s.counts as Record<string, number>).filter(([, n]) => n > 0).map(([id, pop]) => { const i = renderer.creatures.info.get(+id); return i ? { id: +id, name: i.name, color: i.color, role: roleOf(i.genome), size: 0.12 * Math.pow(250, i.genome[0]), pop } : null; }).filter(Boolean) as any[];
@@ -176,12 +190,12 @@ async function boot() {
   worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     const m = ev.data as any;
     switch (m.t) {
-      case 'world': renderer.setWorld(m); shell.setBiome(m.biome); document.getElementById('boot')?.classList.add('gone'); break;
-      case 'frame': renderer.creatures.onFrame(m.data, m.n, m.tick, performance.now()); if (m.events?.length) renderer.fx.onEvents(m.events, renderer.cam.view()); break;
+      case 'world': renderer.setWorld(m); audio.setBiome(m.biome); shell.setBiome(m.biome); document.getElementById('boot')?.classList.add('gone'); break;
+      case 'frame': renderer.creatures.onFrame(m.data, m.n, m.tick, performance.now()); if (m.events?.length) { const v = renderer.cam.view(); renderer.fx.onEvents(m.events, v); for (const ev of m.events) { if (ev.t === 'boom') audio.boom(); else if (ev.t === 'bolt') audio.bolt(); else if (ev.t === 'glow') audio.shimmer(); else audio.worldEvent(ev, v); } } break;
       case 'species': renderer.creatures.setSpecies(m.list); break;
       case 'stats': onStats(m.stats); break;
-      case 'toast': shell.toast(m.kind, m.text, m.sub); break;
-      case 'spawned': shell.toast(m.ok ? 'ok' : 'warn', m.msg); break;
+      case 'toast': shell.toast(m.kind, m.text, m.sub); audio.toast(m.kind); break;
+      case 'spawned': shell.toast(m.ok ? 'ok' : 'warn', m.msg); if (m.ok) audio.pop(); break;
       case 'powered': if (!m.ok) shell.toast('warn', m.msg); break;
       case 'codex': codex.setUnlocked(m.unlocked, m.fresh); if (m.fresh?.length) shell.toast('species', `New in the codex: ${m.fresh.map((id: string) => TEMPLATE_BY_ID[id]?.name).filter(Boolean).slice(0, 3).join(', ')}`); break;
       case 'inspect':
@@ -190,9 +204,9 @@ async function boot() {
         inspector.update(m.data); break;
       case 'web': statsUi.setWeb(m); break;
       case 'savedata': { const auto = pendingSaves.get(m.token) ?? false; pendingSaves.delete(m.token); storeSave(m.slot, m.data, auto); break; }
-      case 'choice': shell.setSpeed(0, false); shell.closePanels(); choiceModal.show(m); break;
+      case 'choice': shell.setSpeed(0, false); shell.closePanels(); choiceModal.show(m); audio.choice(); break;
       case 'resume': shell.setSpeed(m.speed, false); break;
-      case 'ending': shell.setSpeed(0, false); shell.closePanels(); endings.show({ id: m.id, def: m.def, summary: m.summary, choices: m.choices, alive: m.alive, species: m.species }); break;
+      case 'ending': shell.setSpeed(0, false); shell.closePanels(); endings.show({ id: m.id, def: m.def, summary: m.summary, choices: m.choices, alive: m.alive, species: m.species }); audio.ending(m.def.kind === 'good'); break;
       case 'loaded': shell.setBiome(m.biome); lastEnvBiome = ''; break;
     }
   };
@@ -207,7 +221,8 @@ async function boot() {
   }, 250);
 
   // playtime and autosave
-  setInterval(() => { if (inGame && !document.hidden) playSec += 1; }, 1000);
+  const hints = new Hints();
+  setInterval(() => { if (inGame && !document.hidden) { playSec += 1; hints.tick(sessionSec++, { speed: shell.speed, panelOpen: false, modal: document.querySelector('.choice.open,.ending.open,.title.open,.panel.open') !== null }); } }, 1000);
   setInterval(() => { if (inGame && slot && settings.autosave && !title.el.classList.contains('open')) requestSave(slot, true); }, 120000);
   document.addEventListener('visibilitychange', () => { if (document.hidden && inGame && slot && settings.autosave) requestSave(slot, true); });
 
@@ -215,7 +230,7 @@ async function boot() {
   await refreshSlots();
   title.show(slots, slot);
   document.getElementById('boot')?.classList.add('gone');
-  (window as any).petri = { renderer, send, worker, tool, newGame, loadSlot, requestSave };
+  (window as any).petri = { renderer, send, worker, tool, newGame, loadSlot, requestSave, audio };
   const quick = new URLSearchParams(location.search).get('quick');
   if (quick) newGame(0, 'Quick', quick);
 }

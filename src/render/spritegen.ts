@@ -6,7 +6,7 @@ import { G } from '../shared/constants';
 import { C8, P, shade, outline } from './canvas8';
 import { hsl2rgb, hexR, hexG, hexB, makeCanvas, mix } from './util';
 
-export interface SpriteSet { frames: HTMLCanvasElement[]; basePx: number; color: number; archetype: string; glow: boolean; }
+export interface SpriteSet { frames: HTMLCanvasElement[]; basePx: number; color: number; archetype: string; glow: boolean; glowCol: number; }
 interface Pose { ph: number; atk: number; }
 type Pal = number[];
 
@@ -526,5 +526,5 @@ export function generateSprite(genome: ArrayLike<number>, template?: string): Sp
   frames.push(toCanvas(deadFrame(neutral!, design, pal, false), pal));
   const dot = makeCanvas(2, 2); const dx = dot.getContext('2d')!; dx.fillStyle = '#fff'; dx.fillRect(0, 0, 2, 2); frames.push(dot);
   const glow = genome[G.BIOLUM] > 0.3;
-  return { frames, basePx: lay.ref, color: mix(pal[P.BASE], 0x000000, 0.0), archetype: cl.arch + (design.variant ? ':' + design.variant : ''), glow };
+  return { frames, basePx: lay.ref, color: mix(pal[P.BASE], 0x000000, 0.0), archetype: cl.arch + (design.variant ? ':' + design.variant : ''), glow, glowCol: pal[P.GLOW] };
 }

@@ -30,6 +30,7 @@ export class CreatureLayer {
   private tArrive = 0; private interval = 33;
   visible = 0;
   gore = true;
+  glow: import('./glow').GlowLayer | null = null;
 
   constructor() { for (const g of this.groups) this.root.addChild(g); }
 
@@ -105,6 +106,7 @@ export class CreatureLayer {
         p.tint = kind === 3 ? decayTint(((packed >> 9) & 15) / 15) : packed & 128 ? 0xff9a9a : packed & 256 ? 0xb4ff9a : 0xffffff;
       }
       p.x = x; p.y = y; p.alpha = 1;
+      if (sp.set.glow && screenPx >= 3.2 && this.glow && kind !== 3) this.glow.add(x, y, size * 2.6 + 2, sp.set.glowCol, 0.4 + 0.15 * Math.sin(now * 0.004 + slot));
       c.particleChildren[u] = p; used[layer][sp.page] = u + 1; vis++;
     }
     for (let l = 0; l < 3; l++) for (let pg = 0; pg < this.containers[l].length; pg++) {

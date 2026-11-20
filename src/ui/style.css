@@ -209,3 +209,19 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 @media (max-width: 720px) { .en-title { font-size: 22px; letter-spacing: 3px; } }
 
 @media (max-width: 720px) { .dock .btn { min-width: 40px; padding: 0 4px; } .dock .btn span { font-size: 9px; letter-spacing: 0; } .dock { max-width: calc(100vw - 8px); } }
+
+.seg { display: inline-flex; border: 1px solid var(--line2); } .seg button { padding: 3px 9px; font-size: 11px; color: var(--dim); } .seg button.on { background: var(--accent); color: #07110e; }
+.panel.narrow { max-height: 62vh; }
+
+/* ---- tips ---- */
+.hint-card { position: absolute; left: 12px; bottom: calc(var(--dock) + 24px); width: min(300px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--line2); border-left: 3px solid var(--accent); padding: 8px 12px; opacity: 0; transform: translateY(10px); transition: opacity .3s, transform .3s; pointer-events: none !important; z-index: 3; }
+.hint-card.in { opacity: 1; transform: none; pointer-events: auto !important; }
+.hc-t { font-size: 10px; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; } .hc-x { font-size: 12px; color: var(--text); line-height: 1.4; margin: 3px 0 6px; }
+.hc-b { display: flex; gap: 10px; } .hc-b button { font-size: 11px; color: var(--dim); text-decoration: underline; } .hc-b button:hover { color: var(--text); }
+@media (max-width: 720px) { .hint-card { bottom: calc(var(--dock) + 16px); left: 8px; } }
+
+.zoomctl { position: absolute; right: 10px; bottom: calc(var(--dock) + 24px); display: none; flex-direction: column; gap: 4px; }
+.zoomctl button { width: 38px; height: 38px; background: var(--panel); border: 1px solid var(--line2); font-size: 20px; color: var(--text); }
+@media (pointer: coarse) { .zoomctl { display: flex; } .hint { display: none; } .btn { min-height: 34px; } .dock .btn { height: 46px; } }
+
+.panel.open ~ .hint-card { opacity: 0 !important; pointer-events: none !important; }

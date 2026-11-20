@@ -9,6 +9,7 @@ import { Ambient } from './ambient';
 import { CreatureLayer } from './creatures';
 import { Lighting } from './lighting';
 import { Settlements } from './settlements';
+import { GlowLayer } from './glow';
 import { Fx } from './fx';
 import { hexR, hexG, hexB } from './util';
 
@@ -25,6 +26,7 @@ export class Renderer {
   lighting = new Lighting();
   fx = new Fx();
   settlements = new Settlements();
+  glow = new GlowLayer();
   def: BiomeDef | null = null;
   medium: Uint8Array = new Uint8Array(W * H);
   time = 0;
@@ -42,6 +44,7 @@ export class Renderer {
   quality = 1;
 
   async init(parent: HTMLElement) {
+    this.creatures.glow = this.glow;
     this.app = new Application();
     await this.app.init({
       resizeTo: parent, background: 0x0a0e14, antialias: false, autoDensity: true,
@@ -61,6 +64,7 @@ export class Renderer {
     this.app.ticker.add((tk) => this.tick(tk.deltaMS / 1000));
   }
 
+  setQuality(q: number) { this.quality = q; this.ambient.density = q === 0 ? 0.35 : q === 1 ? 0.7 : 1; this.glow.enabled = q > 0; this.app.renderer.resolution = q === 0 ? 1 : Math.min(window.devicePixelRatio || 1, 2); if (this.def) this.ambient.setWorld(this.def, this.medium); }
   setGore(on: boolean) { this.fx.gore = on; this.creatures.gore = on; }
 
   setWorld(m: WorldMsg) {
@@ -71,16 +75,16 @@ export class Renderer {
       this.terrain.build(def, m.medium, m.light);
       // water meshes sit between ground and creatures (back) / above creatures (front)
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.glow.container, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       const horizon = def.terrain.water > 0 ? def.terrain.water * H : Math.min(...Array.from(m.surfaceY).filter((v) => v < H), H * 0.5);
       this.bg.build(def, horizon);
-      this.ambient.setVents(m.vents); this.ambient.setWorld(def, m.medium); this.fx.setWorld(m.medium);
+      this.ambient.setVents(m.vents); this.ambient.setWorld(def, m.medium); this.glow.setWorld(m.medium, m.vents); this.fx.setWorld(m.medium);
       this.lighting.setAmbient(def.light);
       this.creatures.reset();
     } else {
       this.terrain.build(def, m.medium, m.light); // terrain edited (power / regen): repaint
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.glow.container, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       this.ambient.setWorld(def, m.medium);
     }
   }
@@ -98,7 +102,7 @@ export class Renderer {
       this.bg.update(cam, this.time, this.def.fog);
       this.terrain.update(this.time);
       this.ambient.update(dt, cam, this.time); this.fx.update(dt, cam);
-      this.creatures.render(cam, performance.now());
+      this.glow.begin(); this.creatures.render(cam, performance.now()); this.glow.end(this.time);
     }
     // tell the sim what we can see (throttled)
     const v = cam.view(); this.viewT += dt;
