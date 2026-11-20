@@ -10,8 +10,12 @@ import { seedMicrobes } from './seed';
 import { collapseWorld, expandWorld, stepCoarse, COARSE_STEP, ensureCoarse, maybeDisperse } from './coarse';
 import { radiate, livingIn } from './radiation';
 import { newEraState, evaluateEras, type EraState } from './eras';
+import { placeTemplate, applyPower, pickEntity, inspect, foodWeb, unlockedTemplates, scanDiscoveries } from './tools';
+import { runEncounter } from './encounters';
+import { snapshot, restore, type SaveData } from './save';
 
 type Post = (msg: any, transfer?: Transferable[]) => void;
+export interface Timed { tick: number; world: number; key: string; delta: number }
 
 /**
  * The simulation host (runs inside a Web Worker).
@@ -40,8 +44,13 @@ export class Sim {
   newSpecies: number[] = []; extinctNames: { name: string; peak: number }[] = [];
   history: { t: number; kind: string; text: string }[] = [];
   started = false;
+  /** codex templates the player has discovered (per save) */
+  found = new Set<string>();
+  timed: Timed[] = [];
+  config = { encounters: true };
+  codexDirty = true; lastCodex = 0; nextEncounter = 0; lastScan = 0; lastCodexKey = '';
 
-  constructor(private post: Post) {}
+  constructor(public post: Post) {}
 
   get world(): World { return this.worlds[this.active]; }
 
@@ -50,8 +59,7 @@ export class Sim {
     this.seed = seed; this.rng = new RNG(seed);
     this.ctx = { sp: new SpeciesRegistry(this.rng), events: [], era: undefined };
     this.era = newEraState(); this.ctx.era = this.era;
-    this.ctx.sp.onNew = (id) => this.newSpecies.push(id);
-    this.ctx.sp.onExtinct = (id) => { const s = this.ctx.sp.list[id]; this.extinctNames.push({ name: s.name, peak: s.peak }); };
+    this.hookRegistry(); this.found = new Set(); this.timed = []; this.codexDirty = true; this.history = [];
     this.worlds = BIOMES.map((_, i) => { const w = new World(i, seed); w.ctxRef = this.ctx; return w; });
     this.ctx.worlds = this.worlds;
     this.active = BIOME_INDEX[biome] ?? 0;
@@ -61,12 +69,57 @@ export class Sim {
     this.sentTerrain = -1; this.totalTicks = 0; this.started = true; this.last = performance.now();
   }
 
+  hookRegistry() {
+    this.ctx.sp.onNew = (id) => this.newSpecies.push(id);
+    this.ctx.sp.onExtinct = (id) => { const s = this.ctx.sp.list[id]; this.extinctNames.push({ name: s.name, peak: s.peak }); };
+  }
+
+  /** Build empty worlds (no seeding) so a save can be poured into them. */
+  restoring(seed: number) {
+    this.seed = seed; this.rng = new RNG(seed);
+    this.ctx = { sp: new SpeciesRegistry(this.rng), events: [] }; this.ctx.era = this.era;
+    this.worlds = BIOMES.map((_, i) => { const w = new World(i, seed); w.ctxRef = this.ctx; return w; });
+    this.ctx.worlds = this.worlds; this.newSpecies.length = 0; this.extinctNames.length = 0; this.started = true; this.last = performance.now();
+  }
+
+  /** Nudge an environment value for a while, then put it back. */
+  timedEnv(key: string, delta: number, ticks: number) {
+    const w = this.world; const before = (w.env as any)[key] as number; const next = Math.max(0, Math.min(1, before + delta));
+    (w.env as any)[key] = next; w.recomputeLight(); w.terrainVersion++;
+    this.timed.push({ tick: w.tick + ticks, world: w.idx, key, delta: next - before });
+  }
+  private runTimed() {
+    for (let i = this.timed.length - 1; i >= 0; i--) {
+      const t = this.timed[i], w = this.worlds[t.world];
+      if (w.tick >= t.tick) { (w.env as any)[t.key] = Math.max(0, Math.min(1, (w.env as any)[t.key] - t.delta)); w.recomputeLight(); w.terrainVersion++; this.timed.splice(i, 1); }
+    }
+  }
+
+  private sendCodex(force = false) {
+    const list = unlockedTemplates(this.ctx, this.era.reached, this.found);
+    const key = list.join(',');
+    if (!force && key === this.lastCodexKey) return;
+    const fresh = this.lastCodexKey ? list.filter((id) => !this.lastCodexKey.split(',').includes(id)) : [];
+    this.lastCodexKey = key; this.post({ t: 'codex', unlocked: list, fresh });
+  }
+
   handle(m: ToWorker) {
     switch (m.t) {
       case 'init': this.start(m.seed, m.biome); break;
       case 'speed': this.speed = m.v; break;
       case 'biome': this.switchBiome(m.id); break;
       case 'view': this.view = { x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, zoom: m.zoom }; break;
+      case 'spawn': { const w = this.world; const r = placeTemplate(w, this.ctx, (m as any).tpl, (m as any).x, (m as any).y, (m as any).n ?? 1); this.post({ t: 'spawned', ...r, tpl: (m as any).tpl }); break; }
+      case 'power': { const r = applyPower(this.world, this.ctx, (m as any).id, (m as any).x, (m as any).y); this.post({ t: 'powered', ...r, id: (m as any).id }); break; }
+      case 'inspect': {
+        const mm = m as any; let slot = mm.slot, uid = mm.uid;
+        if (mm.x !== undefined) { const p = pickEntity(this.world, mm.x, mm.y, mm.zoom ?? 4); if (!p) { this.post({ t: 'inspect', none: true }); break; } slot = p.slot; uid = p.uid; }
+        this.post({ t: 'inspect', data: inspect(this.world, this.ctx, slot, uid) }); break;
+      }
+      case 'web': this.post({ t: 'web', ...foodWeb(this.world, this.ctx), biome: this.world.def.id }); break;
+      case 'cfg': this.config = { ...this.config, ...(m as any).config }; break;
+      case 'save': this.post({ t: 'savedata', data: snapshot(this), slot: (m as any).slot, token: (m as any).token }); break;
+      case 'load': restore(this, (m as any).data as SaveData); this.lastCodexKey = ''; this.codexDirty = true; this.post({ t: 'loaded', biome: this.world.def.id }); break;
       case 'env': { const w = this.world; (w.env as any)[m.key] = m.value; w.recomputeLight(); w.terrainVersion++; break; }
     }
   }
@@ -132,7 +185,12 @@ export class Sim {
       this.catchUpInactive(activeTicks, now + 14);
     }
     if (now - this.tpsT > 1000) { this.tps = this.tpsCount * 1000 / (now - this.tpsT); this.tpsCount = 0; this.tpsT = now; }
-    if (now - this.lastEra > 1000) { this.lastEra = now; this.updateEra(); }
+    if (now - this.lastEra > 1000) { this.lastEra = now; this.updateEra(); this.runTimed(); }
+    if (now - this.lastScan > 4000) { this.lastScan = now; const fresh = scanDiscoveries(this.ctx, this.found); if (fresh.length) this.codexDirty = true; this.sendCodex(this.codexDirty); this.codexDirty = false; }
+    if (this.config.encounters && this.speed > 0 && this.speed <= 20 && w.mode === 'full') {
+      if (!this.nextEncounter) this.nextEncounter = now + 60000 + this.rng.next() * 60000;
+      else if (now > this.nextEncounter) { this.nextEncounter = now + (70000 + this.rng.next() * 90000) / Math.sqrt(this.speed); runEncounter(this); }
+    }
     if (now - this.lastFrame > 30) { this.lastFrame = now; this.sendFrame(w); }
     if (now - this.lastStats > 500) { this.lastStats = now; this.sendStats(w); this.flushNotices(now); }
   }

@@ -41,6 +41,8 @@ export class Shell {
   private speedBtns: HTMLElement[] = [];
   private eraEl!: HTMLElement;
   private panels = new Map<string, HTMLElement>();
+  private openHooks = new Map<string, (open: boolean) => void>();
+  private dock!: HTMLElement;
   private dockBtns = new Map<string, HTMLElement>();
   private biomeBtns = new Map<string, HTMLElement>();
   private toasts!: HTMLElement;
@@ -99,8 +101,15 @@ export class Shell {
     add('biomes', 'globe', 'Biomes', () => this.togglePanel('biomes'));
     add('tweak', 'sliders', 'Tweak', () => this.togglePanel('tweak'));
     add('life', 'bug', 'Life', () => this.togglePanel('life'));
-    this.root.appendChild(dock);
+    this.dock = dock; this.root.appendChild(dock);
   }
+
+  /** Register a slide-up panel with a dock button. */
+  addPanel(id: string, ico: string, label: string, panel: HTMLElement, onToggle?: (open: boolean) => void) {
+    panel.classList.add('panel'); this.root.appendChild(panel); this.panels.set(id, panel); if (onToggle) this.openHooks.set(id, onToggle);
+    const b = el('button', 'btn'); b.innerHTML = `${icon(ico, 20)}<span>${label}</span>`; b.onclick = () => this.togglePanel(id); this.dock.appendChild(b); this.dockBtns.set(id, b);
+  }
+  isOpen(id: string) { return this.panels.get(id)?.classList.contains('open') ?? false; }
 
   private buildBiomePanel() {
     const p = el('div', 'panel'); p.innerHTML = `<h3>Biomes <span class="sub">Every biome keeps living while you look elsewhere.</span></h3>`;
@@ -126,12 +135,14 @@ export class Shell {
   private settingEls = new Map<string, HTMLElement>();
   private buildSettingsPanel() {
     const p = el('div', 'panel narrow'); p.innerHTML = `<h3>Settings</h3>`;
-    const row = (key: 'gore' | 'debug', label: string, hint: string) => {
+    const row = (key: 'gore' | 'debug' | 'encounters' | 'autosave', label: string, hint: string) => {
       const r = el('label', 'setting'); r.innerHTML = `<span><b>${label}</b><i>${hint}</i></span><button class="tog"></button>`;
       const b = r.querySelector('button')!; b.onclick = () => { (settings as any)[key] = !(settings as any)[key]; saveSettings(); this.syncSettingsUi(); this.hooks.onSettings(); if (key === 'debug') this.debugEl.style.display = settings.debug ? '' : 'none'; };
       this.settingEls.set(key, b); p.appendChild(r);
     };
     row('gore', 'Gore', 'Blood, gibs, bones and wounds when creatures are hurt or killed.');
+    row('encounters', 'Random encounters', 'Storms, outbreaks, migrations and strangers now and then.');
+    row('autosave', 'Autosave', 'Saves to the current slot every couple of minutes.');
     row('debug', 'Debug overlay', 'Frame rate, entity counts and simulation timing. Shortcut: `');
     this.root.appendChild(p); this.panels.set('settings', p); this.syncSettingsUi();
   }
@@ -182,9 +193,9 @@ export class Shell {
   togglePanel(id: string) {
     const open = this.panels.get(id)!.classList.contains('open');
     this.closePanels();
-    if (!open) { this.panels.get(id)!.classList.add('open'); this.dockBtns.get(id)?.classList.add('open'); }
+    if (!open) { this.panels.get(id)!.classList.add('open'); this.dockBtns.get(id)?.classList.add('open'); this.openHooks.get(id)?.(true); }
   }
-  closePanels() { this.panels.forEach((p) => p.classList.remove('open')); this.dockBtns.forEach((b) => b.classList.remove('open')); }
+  closePanels() { this.panels.forEach((p, id) => { if (p.classList.contains('open')) this.openHooks.get(id)?.(false); p.classList.remove('open'); }); this.dockBtns.forEach((b) => b.classList.remove('open')); }
 
   setDebug(lines: [string, string][]) { this.debugEl.innerHTML = lines.map(([k, v]) => `${k.padEnd(9)}<b>${v}</b>`).join('\n'); }
 }

@@ -33,6 +33,9 @@ export class Renderer {
   private lastView = '';
   private viewT = 0;
   fps = 0;
+  follow: { slot: number; uid: number } | null = null;
+  onFollowEnd: (() => void) | null = null;
+  /** world-space radius of the power reticle is drawn by the UI; the renderer only converts coordinates */
   cpuMs = 0;
   quality = 1;
 
@@ -84,6 +87,7 @@ export class Renderer {
     this.time += dt;
     this.fps = this.fps * 0.9 + this.app.ticker.FPS * 0.1;
     const cam = this.cam;
+    if (this.follow) { const p = this.creatures.find(this.follow.slot, this.follow.uid); if (p) cam.focus(p.x, p.y); }
     cam.update(dt);
     const ox = cam.ox, oy = cam.oy, z = cam.zoom;
     for (const c of [this.skyC, this.worldC]) { c.position.set(ox, oy); c.scale.set(z); }
@@ -111,7 +115,7 @@ export class Renderer {
     el.addEventListener('pointermove', (e) => {
       const p = pointers.get(e.pointerId); if (!p) return;
       const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
-      if (pointers.size === 1) { moved += Math.abs(dx) + Math.abs(dy); if (moved > 4) this.cam.pan(dx, dy); }
+      if (pointers.size === 1) { moved += Math.abs(dx) + Math.abs(dy); if (moved > 4) { this.cam.pan(dx, dy); if (this.follow) { this.follow = null; this.onFollowEnd?.(); } } }
       else if (pointers.size === 2) {
         const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (pinchD > 0) this.cam.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / pinchD);

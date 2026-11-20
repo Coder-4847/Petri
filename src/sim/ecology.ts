@@ -8,7 +8,7 @@ import type { World } from './world';
 import type { SpeciesRegistry } from './species';
 import { crossover, mutate, traitsOf, speedCap, type Traits } from './genes';
 
-export interface Ctx { sp: SpeciesRegistry; events: any[]; era?: { reached: number }; worlds?: World[]; }
+export interface Ctx { sp: SpeciesRegistry; events: any[]; era?: { reached: number }; worlds?: World[]; /** codex template id -> species id spawned by the player */ spawned?: Record<string, number>; }
 
 const DT = 1 / TICK_RATE;
 const scratch: Traits = {} as Traits;

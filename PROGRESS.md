@@ -91,4 +91,25 @@
 - Largest animals only reach ~1–5 size units in deep-time runs; era pace beyond era 4 needs Phase 8 tuning.
 - Slight column artifacts under lava pockets in the volcanic biome.
 
-## Next: Phase 6 — Sandbox Tools, Codex, Saves
+## Phase 6: Sandbox Tools, Codex, Saves — DONE
+- **Title screen + 5 save slots** (IndexedDB): thumbnail, name, era, playtime, species count. New world (name + start biome),
+  load, delete, export / import as gzip `.petri` files, "play without saving". Autosave every 2 min and when the tab hides.
+  Verified: save → reload → load restores identical state (entities, species, tick).
+- **Codex** (92 templates incl. 8 legends and 4 strangers): common creatures unlock by era, rarer ones when something
+  genetically close evolves in the world, legends/strangers only through random encounters. Unlocks are per save.
+- **Spawn tool**: pick from the codex, click the world to place 1/3/10. Habitat rules (salt/fresh water, open ground, air),
+  warns when the biome is unsuitable; works in time-lapse too (introduces to the population model).
+- **Inspector**: click a creature (name, diet, state, health/energy/age bars, traits, ancestry, follow camera).
+- **God powers**: meteor (crater, dust, blast), lightning, plague, bless, fertilise, mutagen, with reticle + FX.
+- **Random encounters** (toggle in settings): nutrient upwelling, storms, meteor showers, outbreaks, heat/cold spells
+  (temporary env nudges that revert), migrations, strangers appearing (also unlock codex entries).
+- **Stats panel**: population-by-role chart (log scale) and a live food-web diagram (eater → eaten, trophic levels).
+- Winged walkers (dragon, griffin, winged horse) via a wing overlay on quadruped/biped painters.
+- Fixed: closed UI panels were swallowing clicks meant for the world (`#ui > *` specificity).
+
+### Known issues
+- Powers and the inspector need individual-level time (1x–20x); in time-lapse they ask you to slow down.
+- Mutagen mutates genomes in place but cached per-individual traits only refresh in offspring.
+- Food-web edges are a heuristic from the same edibility rules the simulation uses (not a log of actual meals).
+
+## Next: Phase 7 — Civilization, Choices, Endings

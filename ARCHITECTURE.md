@@ -97,6 +97,18 @@ Every biome exists from the first moment (`Sim.start`) and starts microbial (`si
 - **Vent chemistry**: `chemAt` gives a diffuse chemistry field around vents so chemosynthesisers are not confined to the vent cells.
 - **Caves**: a cell is roofed only if solid lies above it and within 45 cells below (never in `noFloor` biomes).
 
+## Player tools & saves (Phase 6)
+- `sim/tools.ts`: `placeTemplate` (habitat rules), `applyPower`, `pickEntity`/`inspect`, `foodWeb`, codex unlocks
+  (`unlockedTemplates` by era + `scanDiscoveries` by genetic similarity). `sim/encounters.ts`: weighted random events.
+  Temporary env changes are stored as `timed` entries (`{tick, world, key, delta}`) so they survive saving.
+- Worker messages added: `spawn`, `power`, `inspect` (by position or slot/uid), `web`, `cfg`, `save`, `load`;
+  replies `spawned`, `powered`, `inspect`, `web`, `codex`, `savedata`, `loaded`.
+- `sim/save.ts`: a snapshot is plain structured-clone data (typed arrays, Maps, objects): registry, era, worlds
+  (fields, coarse state, entity arrays when in the full model, terrain only if edited by a crater). Restoring rebuilds
+  worlds from the seed and pours the data in. `ui/saves.ts` stores slots in IndexedDB and exports gzip JSON with tagged typed arrays.
+- UI: `ui/menu.ts` (title + slot list), `ui/codex.ts`, `ui/inspector.ts`, `ui/stats.ts`, `ui/toolbar.ts` (active tool chip + reticle).
+  `Shell.addPanel` registers new dock panels.
+
 ## Rendering
 
 * `terrain.ts` paints solids into a 4-texel-per-cell canvas once per terrain change, and draws water/lava as a

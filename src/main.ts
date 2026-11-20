@@ -1,6 +1,17 @@
 import { Renderer } from './render/renderer';
 import { Shell } from './ui/shell';
 import { settings } from './ui/settings';
+import { Codex } from './ui/codex';
+import { Inspector } from './ui/inspector';
+import { Stats } from './ui/stats';
+import { ToolUI } from './ui/toolbar';
+import { SlotList, TitleScreen, type SlotHooks } from './ui/menu';
+import { listSlots, putSlot, getSlot, deleteSlot, exportBlob, importBlob, download, type SaveMeta } from './ui/saves';
+import { POWERS } from './data/powers';
+import { TEMPLATE_BY_ID } from './data/templates';
+import { BIOMES } from './data/biomes';
+import { ERAS } from './data/eras';
+import { icon } from './ui/icons';
 import type { FromWorker } from './shared/protocol';
 
 async function boot() {
@@ -13,16 +24,127 @@ async function boot() {
   const send = (m: any) => worker.postMessage(m);
   let stats: any = null;
 
+  // ---- game session state
+  let slot = 0; // 0 = playing without a save slot
+  let slotName = 'Untitled';
+  let playSec = 0;
+  let inGame = false;
+  let slots: (SaveMeta | null)[] = [];
+  const refreshSlots = async () => { slots = await listSlots(); worldList.render(slots, slot); if (title.el.classList.contains('open')) title.list.render(slots, slot); };
+
   const shell = new Shell({
     onSpeed: (v) => send({ t: 'speed', v }),
     onBiome: (id) => send({ t: 'biome', id }),
     onEnv: (key, value) => send({ t: 'env', key, value }),
-    onSettings: () => renderer.setGore(settings.gore),
+    onSettings: () => { renderer.setGore(settings.gore); send({ t: 'cfg', config: { encounters: settings.encounters } }); },
   });
 
   renderer.onViewChange = (v) => send({ t: 'view', ...v });
   renderer.setGore(settings.gore);
 
+  // ---- tools: inspect / place / powers
+  const tool = new ToolUI(shell.root, stage, () => renderer.cam.zoom);
+  const inspector = new Inspector((id) => renderer.creatures.spriteFrame(id));
+  shell.root.appendChild(inspector.el);
+  inspector.onFollow = (on) => {
+    if (on && inspector.current) { renderer.follow = { ...inspector.current }; renderer.cam.focus(renderer.cam.tx, renderer.cam.ty, Math.max(renderer.cam.zoom, 8)); } else renderer.follow = null;
+  };
+  inspector.onClose = () => { renderer.follow = null; };
+  renderer.onFollowEnd = () => inspector.setFollow(false);
+  setInterval(() => { if (inspector.current) send({ t: 'inspect', slot: inspector.current.slot, uid: inspector.current.uid }); }, 250);
+
+  renderer.onPick = (x, y) => {
+    const t = tool.tool;
+    if (t.kind === 'inspect') send({ t: 'inspect', x, y, zoom: renderer.cam.zoom });
+    else if (t.kind === 'spawn') send({ t: 'spawn', tpl: t.tpl, x, y, n: t.n });
+    else send({ t: 'power', id: t.id, x, y });
+  };
+
+  // ---- codex
+  const codex = new Codex((tpl, n) => { tool.set({ kind: 'spawn', tpl, name: TEMPLATE_BY_ID[tpl].name, n }); shell.closePanels(); });
+  shell.addPanel('codex', 'book', 'Codex', codex.el, (open) => { if (open) { codex.open(); codex.clearFresh(); } });
+
+  // ---- powers
+  const pw = document.createElement('div');
+  pw.innerHTML = `<h3>Powers <span class="sub">Act on the world. Time must be running at 1x–20x.</span></h3><div class="powers"></div>`;
+  for (const p of POWERS) {
+    const b = document.createElement('button'); b.className = 'power'; b.innerHTML = `${icon(p.icon, 22)}<span><b>${p.name}</b><i>${p.blurb}</i></span>`;
+    b.onclick = () => { tool.set({ kind: 'power', id: p.id, name: p.name, radius: p.radius, ico: p.icon }); shell.closePanels(); };
+    pw.querySelector('.powers')!.appendChild(b);
+  }
+  shell.addPanel('powers', 'bolt', 'Powers', pw);
+
+  // ---- stats & food web
+  const statsUi = new Stats(); statsUi.requestWeb = () => send({ t: 'web' });
+  shell.addPanel('stats', 'chart', 'Stats', statsUi.el, (open) => statsUi.setVisible(open));
+
+  // ---- worlds (save slots)
+  const hooks: SlotHooks = {
+    newGame: (s, name, biome) => newGame(s, name, biome),
+    load: (s) => loadSlot(s),
+    saveHere: (s) => requestSave(s, false),
+    exportSlot: async (s) => { const m = slots[s - 1], d = await getSlot(s); if (m && d) download(await exportBlob(m, d), `${m.name.replace(/[^\w-]+/g, '_')}.petri`); },
+    importInto: async (s, f) => {
+      try { const { meta, data } = await importBlob(f); await putSlot({ ...meta, slot: s, savedAt: Date.now() }, data); await refreshSlots(); shell.toast('ok', `Imported “${meta.name}” into slot ${s}`); }
+      catch (e) { shell.toast('warn', 'Could not import that file', String((e as Error).message ?? e)); }
+    },
+    remove: async (s) => { await deleteSlot(s); if (slot === s) slot = 0; await refreshSlots(); },
+    playWithoutSaving: () => newGame(0, 'Untitled', 'random'),
+  };
+  const worldList = new SlotList(hooks, 'panel');
+  const wp = document.createElement('div'); wp.classList.add('worlds');
+  wp.innerHTML = `<h3>Worlds <span class="sub" id="wd-sub"></span></h3><p class="note">Five save slots live in this browser. Export a slot to keep it as a file or move it to another device.</p>`;
+  wp.appendChild(worldList.el);
+  const toTitle = document.createElement('button'); toTitle.className = 'btn ghost'; toTitle.textContent = 'Back to title screen'; toTitle.style.marginTop = '10px';
+  toTitle.onclick = async () => { if (slot && inGame) requestSave(slot, true); send({ t: 'speed', v: 0 }); shell.closePanels(); await refreshSlots(); title.show(slots, slot); };
+  wp.appendChild(toTitle);
+  shell.addPanel('worlds', 'save', 'Worlds', wp, (open) => { if (open) { refreshSlots(); wp.querySelector('#wd-sub')!.textContent = slot ? `Playing “${slotName}” in slot ${slot}` : 'Not saving — pick a slot to keep this world'; } });
+
+  const title = new TitleScreen(hooks);
+  document.body.appendChild(title.el);
+
+  // ---- saving
+  let saveToken = 0; const pendingSaves = new Map<number, boolean>();
+  function requestSave(target: number, auto: boolean) {
+    if (!inGame) return;
+    const token = ++saveToken; pendingSaves.set(token, auto); send({ t: 'save', slot: target, token });
+  }
+  function thumb(): string {
+    try {
+      const src = renderer.app.renderer.extract.canvas(renderer.app.stage) as HTMLCanvasElement;
+      const c = document.createElement('canvas'); c.width = 192; c.height = 108; const x = c.getContext('2d')!;
+      const ar = src.width / src.height, tw = 16 / 9; let sw = src.width, sh = src.height, sx = 0, sy = 0;
+      if (ar > tw) { sw = src.height * tw; sx = (src.width - sw) / 2; } else { sh = src.width / tw; sy = (src.height - sh) / 2; }
+      x.drawImage(src, sx, sy, sw, sh, 0, 0, 192, 108); return c.toDataURL('image/jpeg', 0.72);
+    } catch { return ''; }
+  }
+  async function storeSave(target: number, data: unknown, auto: boolean) {
+    const eraIdx = stats?.era?.reached ?? 0;
+    const prev = slots[target - 1];
+    const name = target === slot ? slotName : prev?.name ?? slotName;
+    const meta: SaveMeta = { slot: target, name, thumb: thumb(), playtime: Math.round(playSec), era: eraIdx, eraName: ERAS[eraIdx].name, savedAt: Date.now(), biome: stats?.biome ?? '', seed: 0, species: stats?.species ?? 0 };
+    try { await putSlot(meta, data); slot = target; slotName = name; await refreshSlots(); shell.toast('ok', auto ? 'Autosaved' : `Saved to slot ${target}`); }
+    catch (e) { shell.toast('warn', 'Could not save', String((e as Error).message ?? e)); }
+  }
+
+  // ---- starting / loading
+  function resetViews() { renderer.creatures.reset(); renderer.follow = null; inspector.close(); statsUi.clear(); tool.set({ kind: 'inspect' }); }
+  function newGame(s: number, name: string, biome: string) {
+    slot = s; slotName = name; playSec = 0; inGame = true; resetViews();
+    const b = biome === 'random' ? BIOMES[(Math.random() * BIOMES.length) | 0].id : biome;
+    send({ t: 'cfg', config: { encounters: settings.encounters } });
+    send({ t: 'init', seed: (Math.random() * 1e9) | 0, biome: b }); send({ t: 'speed', v: 1 }); shell.setSpeed(1, false);
+    title.hide(); shell.setBiome(b);
+    if (s) setTimeout(() => requestSave(s, true), 2500);
+  }
+  async function loadSlot(s: number) {
+    const data = await getSlot(s), meta = slots[s - 1]; if (!data || !meta) { shell.toast('warn', 'That slot is empty'); return; }
+    slot = s; slotName = meta.name; playSec = meta.playtime; inGame = true; resetViews();
+    send({ t: 'cfg', config: { encounters: settings.encounters } });
+    send({ t: 'load', data }); send({ t: 'speed', v: 1 }); shell.setSpeed(1, false); title.hide();
+  }
+
+  // ---- stats
   const roleOf = (g: number[]) => (g[18] >= Math.max(g[21], g[22], g[23], g[20], g[24]) && g[18] > 0.35) || g[19] > 0.4 ? 'producer' : g[22] > 0.4 ? 'predator' : g[21] > 0.4 && g[22] > 0.25 ? 'omnivore' : g[21] > 0.4 ? 'grazer' : g[23] > 0.4 ? 'decomposer' : g[20] > 0.4 ? 'filter feeder' : 'consumer';
   let lastEnvBiome = '';
   function onStats(s: any) {
@@ -30,18 +152,29 @@ async function boot() {
     shell.setEra(s.era.reached, s.era.progress, `${s.era.clock >= 10 ? Math.round(s.era.clock).toLocaleString() : s.era.clock.toFixed(2)} Ma`);
     if (s.biome !== lastEnvBiome) { lastEnvBiome = s.biome; shell.setBiome(s.biome); shell.setEnv(s.env); }
     const rows = Object.entries(s.counts as Record<string, number>).filter(([, n]) => n > 0).map(([id, pop]) => { const i = renderer.creatures.info.get(+id); return i ? { id: +id, name: i.name, color: i.color, role: roleOf(i.genome), size: 0.12 * Math.pow(250, i.genome[0]), pop } : null; }).filter(Boolean) as any[];
+    statsUi.push(rows, s.species);
     rows.sort((a, b) => b.size - a.size || b.pop - a.pop);
     shell.setLife(rows.slice(0, 60), s.species, s.speciesEver);
   }
 
   worker.onmessage = (ev: MessageEvent<FromWorker>) => {
-    const m = ev.data;
+    const m = ev.data as any;
     switch (m.t) {
-      case 'world': renderer.setWorld(m as any); shell.setBiome((m as any).biome); document.getElementById('boot')?.classList.add('gone'); break;
-      case 'frame': renderer.creatures.onFrame((m as any).data, (m as any).n, (m as any).tick, performance.now()); if ((m as any).events?.length) renderer.fx.onEvents((m as any).events, renderer.cam.view()); break;
-      case 'species': renderer.creatures.setSpecies((m as any).list); break;
-      case 'stats': onStats((m as any).stats); break;
-      case 'toast': shell.toast((m as any).kind, (m as any).text, (m as any).sub); break;
+      case 'world': renderer.setWorld(m); shell.setBiome(m.biome); document.getElementById('boot')?.classList.add('gone'); break;
+      case 'frame': renderer.creatures.onFrame(m.data, m.n, m.tick, performance.now()); if (m.events?.length) renderer.fx.onEvents(m.events, renderer.cam.view()); break;
+      case 'species': renderer.creatures.setSpecies(m.list); break;
+      case 'stats': onStats(m.stats); break;
+      case 'toast': shell.toast(m.kind, m.text, m.sub); break;
+      case 'spawned': shell.toast(m.ok ? 'ok' : 'warn', m.msg); break;
+      case 'powered': if (!m.ok) shell.toast('warn', m.msg); break;
+      case 'codex': codex.setUnlocked(m.unlocked, m.fresh); if (m.fresh?.length) shell.toast('species', `New in the codex: ${m.fresh.map((id: string) => TEMPLATE_BY_ID[id]?.name).filter(Boolean).slice(0, 3).join(', ')}`); break;
+      case 'inspect':
+        if (m.none) { if (tool.tool.kind === 'inspect') inspector.close(); break; }
+        if (!inspector.current || inspector.current.uid !== m.data.uid) { if (m.data.gone) break; inspector.show(m.data.slot, m.data.uid); inspector.setFollow(false); }
+        inspector.update(m.data); break;
+      case 'web': statsUi.setWeb(m); break;
+      case 'savedata': { const auto = pendingSaves.get(m.token) ?? false; pendingSaves.delete(m.token); storeSave(m.slot, m.data, auto); break; }
+      case 'loaded': shell.setBiome(m.biome); lastEnvBiome = ''; break;
     }
   };
 
@@ -54,8 +187,17 @@ async function boot() {
     ]);
   }, 250);
 
-  send({ t: 'init', seed: (Math.random() * 1e9) | 0, biome: 'reef' });
-  send({ t: 'speed', v: 1 });
-  (window as any).petri = { renderer, send, worker };
+  // playtime and autosave
+  setInterval(() => { if (inGame && !document.hidden) playSec += 1; }, 1000);
+  setInterval(() => { if (inGame && slot && settings.autosave && !title.el.classList.contains('open')) requestSave(slot, true); }, 120000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden && inGame && slot && settings.autosave) requestSave(slot, true); });
+
+  // ---- title screen
+  await refreshSlots();
+  title.show(slots, slot);
+  document.getElementById('boot')?.classList.add('gone');
+  (window as any).petri = { renderer, send, worker, tool, newGame, loadSlot, requestSave };
+  const quick = new URLSearchParams(location.search).get('quick');
+  if (quick) newGame(0, 'Quick', quick);
 }
 boot().catch((e) => { console.error(e); document.querySelector('.boot-sub')!.textContent = 'Could not start: ' + e; });

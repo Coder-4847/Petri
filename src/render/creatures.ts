@@ -33,7 +33,13 @@ export class CreatureLayer {
 
   constructor() { for (const g of this.groups) this.root.addChild(g); }
 
-  setSpecies(list: SpeciesInfo[]) { for (const s of list) { this.info.set(s.id, s); } }
+  setSpecies(list: SpeciesInfo[]) { for (const s of list) { const old = this.info.get(s.id); if (old && old.name !== s.name) this.sprites.delete(s.id); this.info.set(s.id, s); } }
+  /** First move frame of a species' sprite (for the inspector and codex). */
+  spriteFrame(id: number): HTMLCanvasElement | null { return this.ensure(id)?.set.frames[0] ?? null; }
+  /** Latest known position of a creature (by slot + uid), or null if it is not in the last snapshot. */
+  find(slot: number, uid: number): { x: number; y: number } | null {
+    const c = this.cur; for (let i = 0; i < this.curN; i++) { const o = i * FRAME_STRIDE; if (c[o] === slot && c[o + 1] === uid) return { x: c[o + 2], y: c[o + 3] }; } return null;
+  }
 
   reset() { this.cur = new Float32Array(0); this.curN = 0; this.curTick = -1; this.puid.fill(0); }
 

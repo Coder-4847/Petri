@@ -31,6 +31,8 @@ export class World {
   seed: number;
   /** transient atmospheric dimming from asteroid dust / ash (0 = clear) */
   dust = 0;
+  /** terrain was changed by the player (craters), so a save must store the grid */
+  edited = false;
   mode: 'full' | 'coarse' = 'full';
   cs?: import('./coarse').CoarseState;
   nutTmp?: Float32Array;

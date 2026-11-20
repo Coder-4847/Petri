@@ -4,7 +4,7 @@ import { makeCanvas } from './util';
 import type { Camera } from './camera';
 
 // Particle kinds
-const BLOOD = 0, GIB_ORGAN = 1, GIB_BONE = 2, CLOUD = 3, CRUMB = 4, SPLASH = 5;
+const BLOOD = 0, GIB_ORGAN = 1, GIB_BONE = 2, CLOUD = 3, CRUMB = 4, SPLASH = 5, DUSTC = 6, SPARK = 7, GLOWP = 8;
 const MAX = 1400;
 
 /** Blood, gibs, bones and clouds in water, plus lasting stains where gore lands. Cosmetic only. */
@@ -15,7 +15,7 @@ export class Fx {
   private stainTex: Texture;
   private parts: Particle[] = [];
   private kind = new Uint8Array(MAX); private x = new Float32Array(MAX); private y = new Float32Array(MAX); private vx = new Float32Array(MAX); private vy = new Float32Array(MAX);
-  private life = new Float32Array(MAX); private maxLife = new Float32Array(MAX); private sz = new Float32Array(MAX); private rot = new Float32Array(MAX); private spin = new Float32Array(MAX);
+  private life = new Float32Array(MAX); private maxLife = new Float32Array(MAX); private sz = new Float32Array(MAX); private rot = new Float32Array(MAX); private spin = new Float32Array(MAX); private tn = new Uint32Array(MAX);
   private n = 0; private head = 0;
   private tex: { px: Texture; glow: Texture; base: Texture };
   private medium: Uint8Array = new Uint8Array(W * H);
@@ -39,14 +39,26 @@ export class Fx {
     this.stainCanvas.getContext('2d')!.clearRect(0, 0, this.stainCanvas.width, this.stainCanvas.height); this.stainTex.source.update();
   }
 
-  private spawn(kind: number, x: number, y: number, vx: number, vy: number, life: number, sz: number) {
+  private spawn(kind: number, x: number, y: number, vx: number, vy: number, life: number, sz: number, tint = 0xffffff) {
     const i = this.head; this.head = (this.head + 1) % MAX; if (this.n < MAX) this.n++;
-    this.kind[i] = kind; this.x[i] = x; this.y[i] = y; this.vx[i] = vx; this.vy[i] = vy; this.life[i] = life; this.maxLife[i] = life; this.sz[i] = sz; this.rot[i] = 0; this.spin[i] = (Math.random() - 0.5) * 12;
+    this.kind[i] = kind; this.x[i] = x; this.y[i] = y; this.vx[i] = vx; this.vy[i] = vy; this.life[i] = life; this.maxLife[i] = life; this.sz[i] = sz; this.rot[i] = 0; this.spin[i] = (Math.random() - 0.5) * 12; this.tn[i] = tint;
   }
   private cell(x: number, y: number) { const cx = x | 0, cy = y | 0; return cx < 0 || cx >= W || cy < 0 || cy >= H ? 5 : this.medium[cy * W + cx]; }
 
   /** Turn simulation events into particles. `sizeOfSp` lets us scale effects by the victim's size. */
   onEvents(events: any[], view: { x0: number; x1: number; y0: number; y1: number }) {
+    for (const ev of events) {
+      if (ev.x < view.x0 - 30 || ev.x > view.x1 + 30 || ev.y < view.y0 - 30 || ev.y > view.y1 + 30) continue;
+      if (ev.t === 'boom') {
+        for (let k = 0; k < 46; k++) { const a = Math.random() * 6.283, v = 3 + Math.random() * 9; this.spawn(DUSTC, ev.x + Math.cos(a) * 2, ev.y + Math.sin(a) * 1.5, Math.cos(a) * v, Math.sin(a) * v * 0.7 - 2, 1.4 + Math.random() * 1.6, 1.5 + Math.random() * 2.5, k % 3 ? 0xb9a07a : 0x8a7a68); }
+        for (let k = 0; k < 40; k++) { const a = Math.random() * 6.283, v = 8 + Math.random() * 16; this.spawn(SPARK, ev.x, ev.y, Math.cos(a) * v, Math.sin(a) * v - 8, 0.5 + Math.random() * 0.9, 0.35, k % 2 ? 0xffc060 : 0xff7a30); }
+      } else if (ev.t === 'bolt') {
+        let bx = ev.x + (Math.random() - 0.5) * 6; for (let yy = Math.max(0, ev.y - 70); yy < ev.y; yy += 1.1) { bx += (Math.random() - 0.5) * 1.4; bx += (ev.x - bx) * 0.06; this.spawn(SPARK, bx, yy, 0, 0, 0.28, 0.55, 0xeef6ff); }
+        for (let k = 0; k < 14; k++) this.spawn(SPARK, ev.x, ev.y, (Math.random() - 0.5) * 14, -Math.random() * 10, 0.5, 0.35, 0xffe27a);
+      } else if (ev.t === 'glow') {
+        for (let k = 0; k < 36; k++) { const a = Math.random() * 6.283, r = Math.sqrt(Math.random()) * ev.r; this.spawn(GLOWP, ev.x + Math.cos(a) * r, ev.y + Math.sin(a) * r * 0.7, 0, -1.5 - Math.random() * 2, 1.2 + Math.random(), 1.6 + Math.random(), 0xb8ffd8); }
+      }
+    }
     if (!this.gore) return;
     for (const ev of events) {
       if (ev.x < view.x0 - 4 || ev.x > view.x1 + 4 || ev.y < view.y0 - 4 || ev.y > view.y1 + 4) continue;
@@ -86,14 +98,15 @@ export class Fx {
           this.vy[i] = -this.vy[i] * 0.25; this.vx[i] *= 0.4; this.spin[i] *= 0.2; if (Math.abs(this.vy[i]) < 0.6) { this.vy[i] = 0; this.vx[i] = 0; this.spin[i] = 0; if (this.life[i] > 3) this.life[i] = 3; }
         } else { this.x[i] = nx; this.y[i] = ny; }
         this.rot[i] += this.spin[i] * dt;
-      } else if (kind === CLOUD) { this.x[i] += this.vx[i] * dt; this.y[i] += this.vy[i] * dt; this.sz[i] += dt * 0.9; } else { this.x[i] += this.vx[i] * dt; this.y[i] += this.vy[i] * dt; this.vy[i] += 8 * dt; }
+      } else if (kind === CLOUD || kind === DUSTC || kind === GLOWP) { this.x[i] += this.vx[i] * dt; this.y[i] += this.vy[i] * dt; this.sz[i] += dt * (kind === GLOWP ? 0.2 : 0.9); if (kind === DUSTC) { this.vx[i] *= 1 - dt * 1.4; this.vy[i] *= 1 - dt * 1.4; } } else { this.x[i] += this.vx[i] * dt; this.y[i] += this.vy[i] * dt; this.vy[i] += 8 * dt; }
       const p = this.parts[i];
       const t = this.life[i] / this.maxLife[i];
       p.x = this.x[i]; p.y = this.y[i];
-      if (kind === CLOUD) { p.texture = this.tex.glow; const s = this.sz[i] / 6; p.scaleX = s; p.scaleY = s; p.tint = 0x9a1424; p.alpha = Math.min(0.55, t * 0.6); p.rotation = 0; }
+      if (kind === DUSTC || kind === GLOWP) { p.texture = this.tex.glow; const s = this.sz[i] / 6; p.scaleX = s; p.scaleY = s; p.tint = this.tn[i]; p.alpha = Math.min(kind === GLOWP ? 0.8 : 0.5, t * 0.7); p.rotation = 0; }
+      else if (kind === CLOUD) { p.texture = this.tex.glow; const s = this.sz[i] / 6; p.scaleX = s; p.scaleY = s; p.tint = 0x9a1424; p.alpha = Math.min(0.55, t * 0.6); p.rotation = 0; }
       else {
         p.texture = this.tex.px; const s = Math.max(2, this.sz[i] * zoom * (kind === BLOOD ? 1 : 1.2)) / zoom / 2; p.scaleX = s; p.scaleY = s * (kind === GIB_BONE ? 0.55 : 1);
-        p.tint = kind === BLOOD ? (this.sz[i] > 0.35 ? 0xb3202e : 0xd8303c) : kind === GIB_ORGAN ? 0xe0809a : kind === GIB_BONE ? 0xefe9d6 : 0xd8d0b0; p.alpha = kind === BLOOD ? Math.min(1, t * 2.4) : Math.min(1, t * 1.5); p.rotation = this.rot[i];
+        p.tint = kind === SPARK ? this.tn[i] : kind === BLOOD ? (this.sz[i] > 0.35 ? 0xb3202e : 0xd8303c) : kind === GIB_ORGAN ? 0xe0809a : kind === GIB_BONE ? 0xefe9d6 : 0xd8d0b0; p.alpha = kind === BLOOD ? Math.min(1, t * 2.4) : Math.min(1, t * 1.5); p.rotation = this.rot[i];
       }
       arr[k++] = p;
     }

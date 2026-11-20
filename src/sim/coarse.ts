@@ -115,7 +115,7 @@ function profile(w: World, cs: CoarseState, g: Float32Array, t: Traits, kind: nu
   return st / tot;
 }
 
-function edible(pred: CoarseSp, prey: CoarseSp): number {
+export function edible(pred: CoarseSp, prey: CoarseSp): number {
   const g = pred.g, pg = prey.g;
   if (pred.id === prey.id) return 0;
   const size = pred.t.size, sj = prey.t.size;

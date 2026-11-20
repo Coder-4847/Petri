@@ -453,6 +453,17 @@ function toCanvas(c8: C8, pal: Pal): HTMLCanvasElement {
   x.putImageData(img, 0, 0); return cv;
 }
 
+/** Membrane wings on walkers (dragons, griffins, winged horses): painted over the back and flapping with the pose. */
+function addWings(c: C8, d: Design, p: Pose) {
+  const bb = c.bbox(); const L = d.L; const rx = Math.round(bb.x0 + (bb.x1 - bb.x0) * (d.arch === 'biped' ? 0.42 : 0.5));
+  let top = c.h; for (let y = 0; y < c.h; y++) if (c.get(rx, y)) { top = y; break; }
+  const flap = Math.sin(p.ph) * L * 0.1, wl = L * 0.34, rootY = top + 1.5;
+  const tipX = rx - wl * 0.6, tipY = Math.max(1, rootY - wl * 0.85 - flap);
+  c.tri(rx + 1, rootY, rx - wl * 1.1, rootY - wl * 0.2 + flap * 0.4, tipX, tipY, P.ACCENT2);
+  c.tri(rx + 1, rootY, tipX, tipY, rx + wl * 0.25, Math.max(1, rootY - wl * 0.6 - flap), P.SHADE);
+  c.line(rx + 1, rootY, tipX, tipY, P.DARK); c.line(rx + 1, rootY, rx - wl * 1.1, rootY - wl * 0.2 + flap * 0.4, P.DARK);
+}
+
 function finish(c: C8, d: Design, pal: Pal) {
   shade(c);
   const g = d.g;
@@ -505,6 +516,7 @@ export function generateSprite(genome: ArrayLike<number>, template?: string): Sp
     const c = new C8(lay.w, lay.h);
     const pose = f < 4 ? poses[f] : { ph: 0.5, atk: 1 };
     painter(c, design, pose);
+    if ((cl.arch === 'quadruped' || cl.arch === 'biped') && genome[G.WINGS] > 0.55 && genome[G.FLY] > 0.3) addWings(c, design, pose);
     if (f === 0) neutral = c.clone();
     finish(c, design, pal);
     frames.push(toCanvas(c, pal));
