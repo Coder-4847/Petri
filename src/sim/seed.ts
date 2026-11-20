@@ -39,6 +39,7 @@ export function seedMicrobes(w: World, ctx: Ctx, activate: boolean) {
     founders.push({ name: vents ? 'Thermobacter ardens' : 'Abyssococcus niger', tpl: 'chemo', n: 320, g: { ...base, SIZE: 0.03, CHEMO: 0.9, SWIM: 0.1, HUE: 0.05, TEMP_OPT: clampG(env.temp + 0.05), TEMP_TOL: 0.6, METAB: 0.4, DEPTH_PREF: 0.9 } });
     founders.push({ name: 'Sulfovibrio rubra', tpl: 'chemo', n: 200, g: { ...base, SIZE: 0.05, CHEMO: 0.85, SWIM: 0.2, HUE: 0.9, TEMP_OPT: clampG(env.temp + 0.15), DEPTH_PREF: 0.9, TOXIN_RES: 0.6 } });
     founders.push({ name: 'Detritibacter profundus', tpl: 'bacteria', n: 240, g: { ...base, SIZE: 0.02, SCAV: 0.85, SWIM: 0.3, SMELL: 0.5, HUE: 0.12, DEPTH_PREF: 0.9 } });
+    founders.push({ name: 'Chemoflagellata pascens', tpl: 'protist', n: 70, g: { ...base, SIZE: 0.12, HERB: 0.8, FILTER: 0.4, SWIM: 0.5, SMELL: 0.4, HUE: 0.62, DEPTH_PREF: 0.85, REPRO_STRAT: 0.15 } });
     founders.push({ name: 'Bacterivora vorax', tpl: 'protist', n: 50, g: { ...base, SIZE: 0.11, CARN: 0.7, SWIM: 0.5, SMELL: 0.5, HUE: 0.75, DEPTH_PREF: 0.8 } });
   } else {
     const dp = water ? 0.04 : 0;

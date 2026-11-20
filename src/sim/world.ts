@@ -34,6 +34,7 @@ export class World {
   mode: 'full' | 'coarse' = 'full';
   cs?: import('./coarse').CoarseState;
   nutTmp?: Float32Array;
+  belowTmp?: Int16Array;
   /** set by the sim host so low-level code can emit events */
   ctxRef?: import('./ecology').Ctx;
 
@@ -73,13 +74,17 @@ export class World {
     const k = 0.034 * (1 + this.env.nutrients * 0.6);
     const m = this.medium;
     for (let x = 0; x < W; x++) {
+      // nearest solid below each cell: air with ground on both sides is an enclosed cave (dark); sky under an island is not
+      let nextSolid = 1e9; const below = this.belowTmp ?? (this.belowTmp = new Int16Array(H));
+      for (let y = H - 1; y >= 0; y--) { if (IS_SOLID[m[y * W + x]]) nextSolid = y; below[y] = nextSolid === 1e9 ? 9999 : nextSolid - y; }
       let L = sun, roofed = 0;
       for (let y = 0; y < H; y++) {
         const i = y * W + x, c = m[i];
         if (IS_SOLID[c]) { L = 0; roofed = 1; this.light[i] = 0; this.roof[i] = 1; continue; }
+        if (roofed && !this.def.noFloor && below[y] < 45) { if (IS_WATER[c]) L *= 1 - k; this.light[i] = c === AIR ? 6 : Math.min(30, (L * 255) | 0); this.roof[i] = 1; continue; }
+        if (roofed) { roofed = 0; L = sun * 0.85; } // open space below an overhang gets side light
         if (IS_WATER[c]) L *= 1 - k;
-        else if (c === AIR && roofed) { this.light[i] = 6; this.roof[i] = 1; continue; }
-        this.light[i] = (L * 255) | 0; this.roof[i] = roofed;
+        this.light[i] = (L * 255) | 0; this.roof[i] = 0;
       }
     }
   }

@@ -4,7 +4,7 @@ import { settings } from './ui/settings';
 import type { FromWorker } from './shared/protocol';
 
 async function boot() {
-  if (location.hash === '#gallery') { const { showGallery } = await import('./ui/gallery'); showGallery(); return; }
+  if (location.hash.startsWith('#gallery')) { const { showGallery } = await import('./ui/gallery'); showGallery(); return; }
   const stage = document.getElementById('stage')!;
   const renderer = new Renderer();
   await renderer.init(stage);

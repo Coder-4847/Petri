@@ -113,10 +113,10 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: 'vents', name: 'Hydrothermal Vents', blurb: 'Superheated chimneys feeding life without sunlight.', group: 'sea',
-    env: E(0.35, 0.9, 0.05, 0.4, 0.37, 0.8, 0.25),
+    env: E(0.35, 0.9, 0.12, 0.4, 0.37, 0.8, 0.25),
     terrain: { base: 0.9, amp: 5, freq: 1, water: 0.02, waterType: SALT, top: BASALT, topDepth: 3, sub: ROCK, deep: ROCK, features: ['vents'] },
-    sky: [0x101820, 0x1a2430], water: [0x0b2a48, 0x010103], fog: 0x010308, light: 0xd0d8ff,
-    pal: { [BASALT]: { hi: 0x4b4650, base: 0x353039, lo: 0x201c24 }, [ROCK]: { hi: 0x453f4c, base: 0x2e2a35, lo: 0x1a171f } },
+    sky: [0x101820, 0x1a2430], water: [0x1a5a88, 0x0b2a4c], fog: 0x04101e, light: 0xe0e8ff,
+    pal: { [BASALT]: { hi: 0x6a5f6e, base: 0x4a4250, lo: 0x2c2733 }, [ROCK]: { hi: 0x5c5266, base: 0x41394b, lo: 0x2a2433 } },
     ambient: [{ kind: 'plankton', n: 40 }, { kind: 'ash', n: 40 }, { kind: 'bubbles', n: 25 }],
     parallax: [{ kind: 'rocks', color: 0x07050a, y: 0.95, amp: 0.25, speed: 0.3, seed: 31, alpha: 0.7 }],
   },
@@ -300,3 +300,12 @@ export const DEFAULT_PAL: Record<number, MediumPal> = {
   [BASALT]: { hi: 0x58505a, base: 0x3a343f, lo: 0x221e27 },
 };
 export { AIR };
+
+/** Typical animal colouring in each biome (hue 0..1, saturation, camouflage). Evolved lineages drift toward it. */
+export const BIOME_LOOK: Record<string, { hue: number; sat: number; camo: number; pattern?: number }> = {
+  reef: { hue: 0.08, sat: 0.95, camo: 0.1, pattern: 0.85 }, kelp: { hue: 0.11, sat: 0.55, camo: 0.35 }, ocean: { hue: 0.58, sat: 0.35, camo: 0.5 }, deep: { hue: 0.78, sat: 0.2, camo: 0.6 },
+  vents: { hue: 0.02, sat: 0.4, camo: 0.2 }, river: { hue: 0.3, sat: 0.45, camo: 0.4 }, swamp: { hue: 0.2, sat: 0.4, camo: 0.6 }, mangrove: { hue: 0.18, sat: 0.5, camo: 0.5 },
+  grassland: { hue: 0.1, sat: 0.45, camo: 0.35 }, savanna: { hue: 0.1, sat: 0.55, camo: 0.5, pattern: 0.6 }, plains: { hue: 0.09, sat: 0.3, camo: 0.45 }, forest: { hue: 0.08, sat: 0.4, camo: 0.55 },
+  rainforest: { hue: 0.33, sat: 0.9, camo: 0.2, pattern: 0.85 }, desert: { hue: 0.1, sat: 0.4, camo: 0.7 }, tundra: { hue: 0.58, sat: 0.06, camo: 0.8 },
+  mountains: { hue: 0.07, sat: 0.12, camo: 0.6 }, volcanic: { hue: 0.0, sat: 0.35, camo: 0.4 }, sky: { hue: 0.56, sat: 0.7, camo: 0.2 },
+};

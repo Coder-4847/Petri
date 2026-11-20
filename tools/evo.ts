@@ -47,4 +47,11 @@ for (const s of alive) console.log(`   ${ctx.sp.list[s.id].name.padEnd(26)} pop 
   for (const s of cs.sp.values()) { tot += s.pop; for (const k in m) m[k] += s.pop * s.g[(G as any)[k]]; }
   console.log('MEANS ' + Object.entries(m).map(([k, v]) => `${k}=${(v / Math.max(1, tot)).toFixed(2)}`).join(' ') + ` pop=${Math.round(tot)} species=${cs.sp.size}`);
 }
+{ // one-line summary for batch runs
+  const all = [...cs.sp.values()].filter((x) => x.pop >= 1);
+  const cons = all.filter((x) => x.kind === K_ANIMAL), prod = all.filter((x) => x.kind !== K_ANIMAL);
+  const big = [...cons].sort((a, b) => b.t.size - a.t.size)[0];
+  const pred = cons.filter((x) => x.g[G.CARN] > 0.4).length, herb = cons.filter((x) => x.g[G.HERB] > 0.4).length;
+  console.log(`SUMMARY ${biome.padEnd(10)} era=${era.reached} sp=${all.length} producers=${prod.length}(${Math.round(prod.reduce((a, x) => a + x.pop, 0))}) consumers=${cons.length}(${Math.round(cons.reduce((a, x) => a + x.pop, 0))}) herb=${herb} pred=${pred} biggest=${big ? big.t.size.toFixed(1) + ' ' + describeGenome(big.g).slice(0, 4).join('/') : '-'}`);
+}
 void K_ANIMAL; void traitsOf;

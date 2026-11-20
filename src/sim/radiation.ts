@@ -8,6 +8,7 @@ import type { World } from './world';
 import type { Ctx } from './ecology';
 import { spawn } from './ecology';
 import { traitsOf, mutate, distance, type GeneSpec, type Traits } from './genes';
+import { BIOME_LOOK } from '../data/biomes';
 import { ensureCoarse, randomSpot, syncCount, type CoarseSp } from './coarse';
 
 type Habitat = 'sea' | 'fresh' | 'land' | 'sky';
@@ -72,6 +73,17 @@ export const BLUEPRINTS: Blueprint[] = [
   { id: 'big-cat', name: 'large predatory mammal', tpl: 'sabertooth', habitats: LAND, from: (g, t) => t.kind === K_ANIMAL && g[G.ENDOTHERM] > 0.45 && g[G.WALK] > 0.5 && t.size >= 1.0, needs: (a) => has(a, (l) => animal(l) && grazer(l) && l.t.size >= 1.5, 15), g: { SIZE: 0.66, CARN: 0.95, HERB: 0, ENDOTHERM: 0.75, WALK: 0.88, LIMBS: 0.85, JAWS: 0.75, INTEL: 0.45, SMELL: 0.75, VISION: 0.75, EYES: 0.75, AGGR: 0.7, SOCIAL: 0.3, REPRO_STRAT: 0.6, LUNGS: 0.95 }, rate: 0.0006, minParent: 8 },
   { id: 'marine-mammal', name: 'marine mammal', tpl: 'whale', habitats: ['sea'], from: (g, t) => t.kind === K_ANIMAL && t.size >= 1.5 && g[G.SWIM] > 0.6, needs: (a) => has(a, (l) => animal(l) && l.g[G.ENDOTHERM] > 0.4, 10), g: { SIZE: 0.88, ENDOTHERM: 0.7, SWIM: 0.85, FINS: 0.7, TAIL: 0.8, LUNGS: 0.95, GILLS: 0.02, CARN: 0.7, FILTER: 0.3, INTEL: 0.6, SOCIAL: 0.7, LIFESPAN: 0.95, REPRO_STRAT: 0.8, EYES: 0.5, VIBRATION: 0.8 }, rate: 0.0004, minParent: 8 },
   { id: 'hominid', name: 'clever upright primate', tpl: 'hominid', habitats: LAND, from: (g, t) => t.kind === K_ANIMAL && g[G.ENDOTHERM] > 0.45 && g[G.LIMBS] > 0.6 && g[G.INTEL] > 0.25 && t.size >= 0.3 && t.size < 1.5, needs: (a) => has(a, (l) => animal(l) && l.g[G.ENDOTHERM] > 0.45, 30) && has(a, (l) => prod(l.g) && l.t.size >= 0.4, 40), g: { SIZE: 0.5, INTEL: 0.62, SOCIAL: 0.65, LIMBS: 0.9, WALK: 0.8, EYES: 0.8, VISION: 0.85, HERB: 0.5, CARN: 0.4, ENDOTHERM: 0.75, HEAD: 0.8, TAIL: 0, REPRO_STRAT: 0.8, LIFESPAN: 0.7, LUNGS: 0.95 }, rate: 0.0005, minParent: 20 },
+  // ---- extra body plans for variety (Phase 5)
+  { id: 'frog', name: 'frog-like amphibian', tpl: 'frog', habitats: ['fresh', 'land'], from: (g, t) => t.kind === K_ANIMAL && t.size >= 0.25 && g[G.LIMBS] > 0.4 && g[G.GILLS] > 0.2 && g[G.LUNGS] > 0.3, needs: (a) => has(a, (l) => animal(l) && l.t.size >= 0.2, 20), g: { SIZE: 0.38, LIMBS: 0.75, WALK: 0.5, SWIM: 0.5, CARN: 0.8, EYES: 0.8, VISION: 0.8, TAIL: 0, HUMID_OPT: 0.85 }, rate: 0.0007, minParent: 10 },
+  { id: 'snake', name: 'snake', tpl: 'snake', habitats: LAND, from: (g, t) => t.kind === K_ANIMAL && t.size >= 0.4 && g[G.LIMBS] > 0.4 && g[G.LUNGS] > 0.5, needs: (a) => has(a, (l) => animal(l) && l.t.size >= 0.2, 20), g: { SIZE: 0.55, LIMBS: 0.05, SEGMENTS: 0.8, CRAWL: 0.7, WALK: 0.3, CARN: 0.9, VENOM: 0.45, SMELL: 0.8, CAMO: 0.6, PATTERN: 0.8 }, rate: 0.0006, minParent: 10 },
+  { id: 'turtle', name: 'turtle', tpl: 'turtle', habitats: ['land', 'fresh'], from: (g, t) => t.kind === K_ANIMAL && t.size >= 0.4 && g[G.LIMBS] > 0.4 && g[G.LUNGS] > 0.5, needs: (a) => has(a, (l) => prod(l.g) && l.t.size >= 0.3, 30), g: { SIZE: 0.58, SHELL: 0.9, ARMOR: 0.3, HERB: 0.8, CARN: 0.1, WALK: 0.25, SWIM: 0.4, LIFESPAN: 0.98, REPRO_STRAT: 0.7 }, rate: 0.0006, minParent: 10 },
+  { id: 'croc', name: 'crocodilian', tpl: 'croc', habitats: ['fresh', 'land'], from: (g, t) => t.kind === K_ANIMAL && t.size >= 1.5 && g[G.LIMBS] > 0.45 && g[G.LUNGS] > 0.5, needs: (a) => has(a, (l) => animal(l) && l.t.size >= 0.8, 20), g: { SIZE: 0.74, SWIM: 0.75, WALK: 0.35, CARN: 0.95, JAWS: 0.9, ARMOR: 0.55, TAIL: 0.8, AGGR: 0.8, GILLS: 0.1 }, rate: 0.0006, minParent: 8 },
+  { id: 'pterosaur', name: 'flying reptile', tpl: 'pterosaur', habitats: ['land', 'sky'], from: (g, t) => t.kind === K_ANIMAL && t.size >= 0.5 && g[G.LIMBS] > 0.45 && g[G.LUNGS] > 0.5 && g[G.ENDOTHERM] < 0.45, needs: (a) => has(a, (l) => animal(l) && l.t.size >= 0.5, 15), g: { SIZE: 0.62, WINGS: 0.95, FLY: 0.8, CARN: 0.8, EYES: 0.8, VISION: 0.85, ENDOTHERM: 0.3, HEAD: 0.8 }, rate: 0.0005, minParent: 8 },
+  { id: 'plesiosaur', name: 'marine reptile', tpl: 'plesio', habitats: ['sea'], from: (g, t) => t.kind === K_ANIMAL && t.size >= 1.5 && g[G.LIMBS] > 0.4 && g[G.LUNGS] > 0.5, needs: (a) => has(a, (l) => animal(l) && aquatic(l.g) && l.t.size >= 0.5, 15), g: { SIZE: 0.8, SWIM: 0.7, FINS: 0.6, CARN: 0.9, JAWS: 0.5, TAIL: 0.4, GILLS: 0.1, LIMBS: 0.5 }, rate: 0.0005, minParent: 8 },
+  { id: 'armored-giant', name: 'armoured giant', tpl: 'stego', habitats: LAND, from: (g, t) => t.kind === K_ANIMAL && t.size >= 2 && g[G.LIMBS] > 0.5 && g[G.HERB] > 0.4, needs: (a) => has(a, (l) => prod(l.g) && l.t.size >= 0.4, 40), g: { SIZE: 0.78, HERB: 0.92, CARN: 0, ARMOR: 0.7, HORNS: 0.5, TAIL: 0.7, WALK: 0.4, LIFESPAN: 0.85 }, rate: 0.0005, minParent: 8 },
+  { id: 'butterfly', name: 'butterfly', tpl: 'butterfly', habitats: ['land', 'sky'], from: (g, t) => t.kind === K_ANIMAL && g[G.WINGS] > 0.5 && g[G.CUTICLE] > 0.5 && t.size < 0.8, needs: (a) => has(a, (l) => prod(l.g) && l.t.size >= 0.3, 30), g: { SIZE: 0.28, HERB: 0.8, CARN: 0.05, FLY: 0.6, WINGS: 0.9, PATTERN: 0.95, SAT: 0.9 }, rate: 0.0006, minParent: 10 },
+  { id: 'spider', name: 'spider', tpl: 'spider', habitats: LAND, from: (g, t) => t.kind === K_ANIMAL && g[G.CUTICLE] > 0.6 && g[G.LIMBS] > 0.3 && t.size < 1.5, needs: (a) => has(a, (l) => animal(l) && l.g[G.CUTICLE] > 0.6, 20), g: { SIZE: 0.3, CARN: 0.95, HERB: 0, VENOM: 0.5, WALK: 0.5, LIMBS: 0.8, VIBRATION: 0.9, EYES: 0.7 }, rate: 0.0006, minParent: 10 },
+  { id: 'ant', name: 'social insect', tpl: 'ant', habitats: LAND, from: (g, t) => t.kind === K_ANIMAL && g[G.CUTICLE] > 0.6 && g[G.LIMBS] > 0.3 && t.size < 0.6, needs: (a) => has(a, (l) => animal(l) && l.g[G.CUTICLE] > 0.6, 25), g: { SIZE: 0.24, SOCIAL: 0.98, SMELL: 0.9, CARN: 0.5, SCAV: 0.5, HERB: 0.1, REPRO_RATE: 0.95, LIFESPAN: 0.1 }, rate: 0.0006, minParent: 15 },
 ];
 
 const habitatsOf = (w: World): Habitat[] => {
@@ -94,7 +106,7 @@ export function livingIn(w: World, ctx: Ctx): Living[] {
   return out;
 }
 
-const KEEP_TOL = [G.TEMP_OPT, G.TEMP_TOL, G.HUMID_OPT, G.SAL_OPT, G.SAL_TOL, G.DEPTH_PREF, G.PRESS_TOL, G.TOXIN_RES, G.O2_NEED, G.HUE, G.SAT];
+const KEEP_TOL = [G.TEMP_OPT, G.TEMP_TOL, G.HUMID_OPT, G.SAL_OPT, G.SAL_TOL, G.DEPTH_PREF, G.PRESS_TOL, G.TOXIN_RES, G.O2_NEED, G.HUE, G.SAT, G.CAMO, G.PATTERN];
 
 /**
  * Called once per coarse step's worth of time. `dt` = number of coarse steps elapsed (may be < 1 in the
@@ -119,6 +131,9 @@ export function radiate(w: World, ctx: Ctx, dt: number, reached: number): number
     const child = new Float32Array(NG); for (let i = 0; i < NG; i++) child[i] = par.g[i];
     const s = 0.8 + rng.next() * 0.2;
     for (const k in bp.g) { const gi = (G as any)[k] as number; if (KEEP_TOL.includes(gi)) continue; const tgt = (bp.g as any)[k] as number + (rng.next() - 0.5) * 0.08; child[gi] = clamp(child[gi] + (tgt - child[gi]) * s); }
+    // new lineages take on the colouring typical of their biome (camouflage / signalling)
+    const look = BIOME_LOOK[w.def.id];
+    if (look) { const jitter = (rng.next() - 0.5) * 0.14; child[G.HUE] = ((child[G.HUE] + (((look.hue + jitter - child[G.HUE] + 1.5) % 1) - 0.5) * 0.6) % 1 + 1) % 1; child[G.SAT] = clamp(child[G.SAT] + (look.sat - child[G.SAT]) * 0.55); child[G.CAMO] = clamp(child[G.CAMO] + (look.camo - child[G.CAMO]) * 0.4); if (look.pattern !== undefined) child[G.PATTERN] = clamp(child[G.PATTERN] + (look.pattern - child[G.PATTERN]) * 0.5 + (rng.next() - 0.5) * 0.2); }
     // not everything about a new body plan is in the blueprint
     const jit = new Float32Array(NG); mutate(jit, 0, child, 0, rng, 1.2); for (let i = 0; i < NG; i++) child[i] = KEEP_TOL.includes(i) ? child[i] : jit[i];
     // a new body plan must be a real change

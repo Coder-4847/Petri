@@ -43,6 +43,11 @@ export class Ambient {
     this.container.boundsArea = new Rectangle(-10, -10, W + 20, H + 20);
   }
 
+  private vents: { x: number; y: number }[] = [];
+  private plume: { x: number; y: number; t: number; ph: number }[] = [];
+  private plumeParts: Particle[] = [];
+  setVents(v: { x: number; y: number }[]) { this.vents = v; }
+
   setWorld(def: BiomeDef, medium: Uint8Array) {
     this.def = def; this.medium = medium; this.n = 0; this.kind.length = 0;
     this.container.particleChildren.length = 0; this.parts = [];
@@ -50,7 +55,9 @@ export class Ambient {
       const cnt = Math.min(MAX - this.n, Math.round(a.n * this.density));
       for (let i = 0; i < cnt; i++) { const k = this.n++; this.kind[k] = a.kind; this.parts.push(new Particle({ texture: this.texFor(a.kind), anchorX: 0.5, anchorY: 0.5 })); this.x[k] = -999; this.ph[k] = this.rng.next() * 6.28; }
     }
-    this.container.particleChildren = this.parts.slice(); this.container.update();
+    this.plume = []; this.plumeParts = [];
+    for (const v of this.vents) for (let i = 0; i < 28; i++) { this.plume.push({ x: v.x + 0.5, y: v.y, t: i / 28, ph: i * 1.7 + v.x }); this.plumeParts.push(new Particle({ texture: this.tex.glow, anchorX: 0.5, anchorY: 0.5 })); }
+    this.container.particleChildren = this.parts.concat(this.plumeParts); this.container.update();
   }
 
   private texFor(k: Kind): Texture {
@@ -134,6 +141,11 @@ export class Ambient {
         case 'mist': a = 0.07; tint = 0xffffff; break;
       }
       p.alpha = a; p.tint = tint;
+    }
+    for (let i = 0; i < this.plume.length; i++) {
+      const q = this.plume[i], pp = this.plumeParts[i]; q.t += dt * 0.2; if (q.t >= 1) q.t -= 1;
+      const t = q.t; pp.x = q.x + Math.sin(time * 1.2 + q.ph) * t * 2.4; pp.y = q.y - t * 18; const sc = (0.9 + t * 3.2) / 6; pp.scaleX = sc; pp.scaleY = sc;
+      const hot = Math.max(0, 1 - t * 5); pp.tint = hot > 0 ? (0xff9a40) : 0x4a4250; pp.alpha = (1 - t) * (hot > 0 ? 0.85 : 0.38);
     }
     this.container.update();
   }

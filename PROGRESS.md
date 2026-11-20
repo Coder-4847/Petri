@@ -73,4 +73,22 @@
 - Blood clouds are low-res squares (fits the style, could be softer); plant "dead" frames are placeholders (plants vanish).
 - Hit/kill events are sent for every creature in view; very dense fights cap at 500 events per frame.
 
-## Next: Phase 5 — Full Biomes and Animal Roster
+## Phase 5: Full Biomes and Animal Roster — DONE
+- All 18 biomes have a distinct look: depth-dithered terrain palettes, vent plumes (particles), brighter vent water,
+  cave detection fixed (only roofed when solid is both above and within 45 cells below; never in the sky biome)
+- `BIOME_LOOK` nudges hue/saturation/camouflage of radiating lineages toward their habitat (sand-coloured desert lizards,
+  white tundra hares, …)
+- ~87 templates: added amphibians, reptiles, dinosaurs, marine reptiles, pterosaurs, birds, mammals, ice-age megafauna,
+  hominid and extra insects/arachnids; 27 sprite painters; gallery view `#gallery:bird,mammal,insect,extinct`
+- Radiation engine has ~38 blueprints (frog, snake, turtle, croc, pterosaur, plesiosaur, armoured giant, butterfly,
+  spider, social insect added)
+- Coarse model: diffuse vent chemistry (`chemAt`), inter-biome dispersal, viability checks, 40-species cap per world
+- `tools/planet.ts` runs all 18 biomes with dispersal: consumers appear in every biome except the vents, global era 4
+  after 10k steps
+
+### Known issues
+- Vents stay producer/decomposer-only for a long time; consumers must arrive by dispersal.
+- Largest animals only reach ~1–5 size units in deep-time runs; era pace beyond era 4 needs Phase 8 tuning.
+- Slight column artifacts under lava pockets in the volcanic biome.
+
+## Next: Phase 6 — Sandbox Tools, Codex, Saves

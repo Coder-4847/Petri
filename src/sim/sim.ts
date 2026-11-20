@@ -7,7 +7,7 @@ import { stepWorld, cosmeticStep, type Ctx } from './ecology';
 import { SpeciesRegistry } from './species';
 import { RNG } from '../shared/rng';
 import { seedMicrobes } from './seed';
-import { collapseWorld, expandWorld, stepCoarse, COARSE_STEP, ensureCoarse } from './coarse';
+import { collapseWorld, expandWorld, stepCoarse, COARSE_STEP, ensureCoarse, maybeDisperse } from './coarse';
 import { radiate, livingIn } from './radiation';
 import { newEraState, evaluateEras, type EraState } from './eras';
 
@@ -53,6 +53,7 @@ export class Sim {
     this.ctx.sp.onNew = (id) => this.newSpecies.push(id);
     this.ctx.sp.onExtinct = (id) => { const s = this.ctx.sp.list[id]; this.extinctNames.push({ name: s.name, peak: s.peak }); };
     this.worlds = BIOMES.map((_, i) => { const w = new World(i, seed); w.ctxRef = this.ctx; return w; });
+    this.ctx.worlds = this.worlds;
     this.active = BIOME_INDEX[biome] ?? 0;
     this.debt = this.worlds.map(() => 0);
     for (let i = 0; i < this.worlds.length; i++) seedMicrobes(this.worlds[i], this.ctx, i === this.active);
@@ -106,7 +107,7 @@ export class Sim {
           stepWorld(w, this.ctx);
           this.simMs = this.simMs * 0.95 + (performance.now() - t0) * 0.05;
           this.acc -= 1; n++; activeTicks++;
-          if (w.tick % 25 === 0) radiate(w, this.ctx, 0.5, this.era.reached);
+          if (w.tick % 25 === 0) { radiate(w, this.ctx, 0.5, this.era.reached); maybeDisperse(w, this.ctx, 0.5); }
         }
         if (this.acc > 4) this.acc = 4;
         this.tpsCount += n;

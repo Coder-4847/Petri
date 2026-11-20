@@ -77,6 +77,8 @@ export function buildSamples(w: World) {
 
 const DENS = (size: number) => 0.14 / Math.pow(1 + size, 1.6);
 
+export let lastSuit = 0;
+const chemAt = (w: World, sm: Sample) => (sm.zone === 4 ? 1 : w.vents.length && IS_WATER[sm.m] ? 0.3 : 0.02); // diffuse chemistry around vents
 function profile(w: World, cs: CoarseState, g: Float32Array, t: Traits, kind: number, out: Float32Array): number {
   // habitat suitability per sample -> distribution p; returns mean stress weighted by p
   const S = cs.samples; let tot = 0, st = 0;
@@ -102,11 +104,12 @@ function profile(w: World, cs: CoarseState, g: Float32Array, t: Traits, kind: nu
     }
     if (kind === K_PRODUCER) {
       const needL = g[G.PHOTO] > g[G.CHEMO];
-      ok *= needL ? Math.pow(Math.max(0.01, s.L), 0.7) : (s.zone === 4 ? 1 : 0.02);
+      ok *= needL ? Math.pow(Math.max(0.01, s.L), 0.7) : Math.max(0.05, chemAt(w, s));
     }
     const suit = ok * Math.exp(-2.4 * Math.max(0, stress)) * s.w * (1 + 0.5 * (inWater ? 1 - Math.abs(g[G.DEPTH_PREF] - (s.y / H)) : 0));
     out[k] = suit; tot += suit; st += suit * stress;
   }
+  lastSuit = tot;
   if (tot < 1e-9) { for (let k = 0; k < S.length; k++) out[k] = 1 / S.length; return 3; }
   for (let k = 0; k < S.length; k++) out[k] /= tot;
   return st / tot;
@@ -188,7 +191,7 @@ function stepOnce(w: World, ctx: Ctx, cs: CoarseState) {
       const sm = cs.samples[k]; const pk = s.p[k]; if (pk < 1e-4) continue;
       let crowdK = 0, rest = 0;
       for (let oi = 0; oi < prods.length; oi++) { const o = prods[oi]; const x = xk[oi][k]; if (x <= 0) continue; crowdK += x * (0.5 + o.t.size) * 3 * (oi === pi ? 1 : simSize(s.t, o.t)); if (oi !== pi) rest += x * Math.pow(o.t.size, GAMMA); }
-      const light = s.g[G.PHOTO] * sm.L * (0.3 + 0.7 * Nf) + s.g[G.CHEMO] * (sm.zone === 4 ? 1 : 0.02) * (0.3 + 0.7 * Nf);
+      const light = s.g[G.PHOTO] * sm.L * (0.3 + 0.7 * Nf) + s.g[G.CHEMO] * chemAt(w, sm) * (0.3 + 0.7 * Nf);
       const me = Math.pow(s.t.size, GAMMA);
       const lightShare = 1 / (1 + rest / (me + 0.02) * 0.5 * Math.min(1, crowdK));
       gsum += pk * light * (0.35 + 0.65 * lightShare); cf += pk * Math.max(0, 1 - crowdK);
@@ -288,7 +291,7 @@ function stepOnce(w: World, ctx: Ctx, cs: CoarseState) {
   // --- registry counts & extinctions
   for (const s of list) syncCount(ctx, s, w.tick);
   // --- evolution (every 3rd step, with rates scaled up) and hard cap on species per world
-  if (cs.steps % 3 === 0) { evolve(w, ctx, cs, list); radiate(w, ctx, 3, ctx.era?.reached ?? 0); }
+  if (cs.steps % 3 === 0) { evolve(w, ctx, cs, list); radiate(w, ctx, 3, ctx.era?.reached ?? 0); maybeDisperse(w, ctx, 3); }
   if (cs.sp.size > MAX_SPECIES_PER_WORLD) {
     const arr = [...cs.sp.values()].sort((a, b) => a.pop - b.pop);
     for (let i = 0; i < arr.length - MAX_SPECIES_PER_WORLD; i++) { arr[i].pop = 0; syncCount(ctx, arr[i], w.tick); cs.sp.delete(arr[i].id); }
@@ -420,7 +423,7 @@ function payoff(w: World, cs: CoarseState, list: CoarseSp[], me: CoarseSp, g: Fl
     let gsum = 0, cfs = 0;
     for (let k = 0; k < K; k++) {
       const sm = cs.samples[k]; const pk = pbuf[k]; if (pk < 1e-4) continue;
-      const light = g[G.PHOTO] * sm.L * (0.3 + 0.7 * Nf) + g[G.CHEMO] * (sm.zone === 4 ? 1 : 0.02) * (0.3 + 0.7 * Nf);
+      const light = g[G.PHOTO] * sm.L * (0.3 + 0.7 * Nf) + g[G.CHEMO] * chemAt(w, sm) * (0.3 + 0.7 * Nf);
       let crowdK = 0, rest = 0;
       for (const o of list) if (o.kind === K_PRODUCER && o.id !== me.id) { const x = o.pop * o.p[k] / (sm.area * 0.1); crowdK += x * (0.5 + o.t.size) * 3 * simSize(t, o.t); rest += x * Math.pow(o.t.size, GAMMA); }
       const mine = me.pop * pk / (sm.area * 0.1); crowdK += mine * (0.5 + t.size) * 3;
@@ -578,4 +581,43 @@ void cellM; void BLOCK;
 export function evalPayoff(w: World, me: CoarseSp, g: Float32Array): number {
   const cs = ensureCoarse(w); const list: CoarseSp[] = []; for (const s of cs.sp.values()) if (s.pop > 0.2) list.push(s);
   const t = traitsOf(g, 0, {} as Traits); return payoff(w, cs, list, me, g, t, t.kind, new Float32Array(cs.samples.length));
+}
+
+/** How well could this genome live in world `w`? (0 = not at all, ~1 = ideal). */
+export function viability(w: World, g: Float32Array): number {
+  const cs = ensureCoarse(w); const t = traitsOf(g, 0, {} as Traits);
+  const st = profile(w, cs, g, t, t.kind, new Float32Array(cs.samples.length));
+  return lastSuit * Math.exp(-0.8 * Math.max(0, st - 0.2));
+}
+
+/** Add `n` individuals of an existing species to a world (coarse population or real individuals). */
+export function introduce(w: World, ctx: Ctx, id: number, g: Float32Array, n: number) {
+  if (w.mode === 'coarse') {
+    const cs = ensureCoarse(w);
+    const cur = cs.sp.get(id);
+    if (cur) { cur.pop += n; syncCount(ctx, cur, w.tick); return; }
+    const t = traitsOf(g, 0, {} as Traits);
+    const sp: CoarseSp = { id, pop: n, g: new Float32Array(g), t, kind: t.kind, p: new Float32Array(cs.samples.length), stress: 0, r: 0 };
+    (sp as any)._cnt = 0; cs.sp.set(id, sp); syncCount(ctx, sp, w.tick);
+  } else {
+    w.allocEntities(); const tmp = new Float32Array(NG);
+    for (let k = 0; k < n; k++) { const spot = randomSpot(w, g); if (!spot) continue; mutate(tmp, 0, g, 0, w.rng, 0.3); spawn(w, ctx, id, tmp, 0, spot.x, spot.y, { grown: w.rng.next() < 0.6, energyFrac: 0.6, age: w.rng.int(300) }); }
+  }
+}
+
+/** Species spread between biomes: established populations occasionally colonise a viable neighbour. */
+export function maybeDisperse(w: World, ctx: Ctx, rate = 1) {
+  const worlds = ctx.worlds; if (!worlds || ctx.sp.disabled) return;
+  const rng = w.rng; if (rng.next() > 0.01 * rate) return;
+  const src = worlds[rng.int(worlds.length)]; if (src === w || !src.cs) return;
+  const cand: CoarseSp[] = []; let tot = 0;
+  for (const s of src.cs.sp.values()) if (s.pop >= 25) { cand.push(s); tot += s.pop; }
+  if (!cand.length) return;
+  let r = rng.next() * tot, pick = cand[0]; for (const s of cand) { r -= s.pop; if (r <= 0) { pick = s; break; } }
+  // already living here?
+  if (w.mode === 'coarse') { if (w.cs?.sp.has(pick.id)) return; }
+  else if (w.ents) { const e = w.ents; for (let i = 0; i < e.hi; i++) if (e.kind[i] && e.species[i] === pick.id) return; }
+  if (viability(w, pick.g) < 0.22) return;
+  introduce(w, ctx, pick.id, pick.g, Math.max(3, Math.min(8, Math.round(pick.pop * 0.02))));
+  ctx.events.push({ t: 'dispersal', id: pick.id, world: w.idx });
 }

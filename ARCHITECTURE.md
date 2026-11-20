@@ -90,6 +90,13 @@ Every biome exists from the first moment (`Sim.start`) and starts microbial (`si
   intelligence ...); the timeline bar shows progress toward the next one.
 * Tools: `tools/evo.ts` (deep-time experiments, `--env=humidity=0.1@3000`), `tools/simtest.ts` (drive the real Sim host).
 
+### Phase 5 additions
+- **Dispersal**: `maybeDisperse` seeds viable species from neighbouring biomes into others (coarse model), so consumers
+  spread across the planet without moving individuals between worlds.
+- **Biome looks**: `BIOME_LOOK` in `data/biomes.ts` tweaks colour/camouflage genes of radiation daughters.
+- **Vent chemistry**: `chemAt` gives a diffuse chemistry field around vents so chemosynthesisers are not confined to the vent cells.
+- **Caves**: a cell is roofed only if solid lies above it and within 45 cells below (never in `noFloor` biomes).
+
 ## Rendering
 
 * `terrain.ts` paints solids into a 4-texel-per-cell canvas once per terrain change, and draws water/lava as a

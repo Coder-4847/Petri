@@ -22,7 +22,7 @@ export const sizeFromGene = (s: number) => 0.12 * Math.pow(250, s);
 // ---------------------------------------------------------------------------------- classification
 const TPL_ARCH: Record<string, [string, string]> = {
   coccus: ['micro', 'coccus'], bacillus: ['micro', 'bacillus'], spirillum: ['micro', 'spirillum'], flagellate: ['micro', 'flagellate'], ciliate: ['micro', 'ciliate'], diatom: ['micro', 'diatom'], amoeba: ['micro', 'amoeba'],
-  eel: ['worm', 'eel'], crab: ['arthropod', 'beetle'], snail: ['snail', ''], clam: ['sessile', 'clam'], anemone: ['sessile', 'anemone'],
+  eel: ['worm', 'eel'], crab: ['arthropod', 'beetle'], turtle: ['turtle', ''], frog: ['frog', ''], croc: ['croc', ''], snake: ['snake', ''], bat: ['bat', 'bat'], pterosaur: ['bat', 'pterosaur'], butterfly: ['butterfly', ''], spider: ['spider', ''], ant: ['ant', ''], stego: ['quadruped', 'stego'], trike: ['quadruped', 'trike'], plesio: ['whale', 'plesio'], snail: ['snail', ''], clam: ['sessile', 'clam'], anemone: ['sessile', 'anemone'],
   volvox: ['colony', ''], stromatolite: ['mat', ''], choanoflagellate: ['colony', 'grazer'], sponge: ['sessile', 'sponge'], coral: ['sessile', 'coral'], jellyfish: ['jelly', ''],
   copepod: ['arthropod', 'crustacean'], trilobite: ['arthropod', 'trilobite'], worm: ['worm', ''], fish: ['fish', ''], dunkleosteus: ['fish', 'armored'], squid: ['squid', ''],
   moss: ['moss', ''], fern: ['fern', ''], tree: ['tree', ''], kelp: ['kelp', ''], insect: ['arthropod', 'insect'], dragonfly: ['arthropod', 'insect'], scorpion: ['arthropod', 'scorpion'],
@@ -55,12 +55,18 @@ export function classify(g: ArrayLike<number>, tpl?: string): { arch: string; va
     if (a === 'quadruped' && g[G.LIMBS] > 0.35) return { arch: a, variant: v, producer };
     if (a === 'biped' && g[G.LIMBS] > 0.45) return { arch: a, variant: v, producer };
     if (a === 'bird' && g[G.WINGS] > 0.4) return { arch: a, variant: v, producer };
-    if (['jelly', 'worm', 'squid', 'whale', 'arthropod', 'colony'].includes(a)) return { arch: a, variant: v, producer };
+    if (['jelly', 'worm', 'squid', 'whale', 'arthropod', 'colony', 'turtle', 'frog', 'croc', 'snake', 'butterfly', 'spider', 'ant'].includes(a)) return { arch: a, variant: v, producer };
+    if (a === 'bat' && g[G.WINGS] > 0.3) return { arch: a, variant: v, producer };
   }
   if (sessile) return { arch: 'sessile', variant: hint && hint[0] === 'sessile' && hint[1] ? hint[1] : g[G.SHELL] > 0.45 ? 'coral' : g[G.FILTER] > 0.5 ? 'sponge' : g[G.VENOM] > 0.3 ? 'anemone' : 'clam', producer };
   if (g[G.WINGS] > 0.45 && g[G.FLY] > 0.35) return g[G.CUTICLE] > 0.5 && size < 1.2 ? { arch: 'arthropod', variant: 'insect', producer } : { arch: 'bird', variant: '', producer };
   const legs = g[G.LIMBS] >= 0.35 && (g[G.WALK] >= 0.25 || g[G.CRAWL] >= 0.3);
   if (legs && g[G.CUTICLE] > 0.5 && g[G.SEGMENTS] > 0.45 && size < 2.5) return { arch: 'arthropod', variant: g[G.SWIM] > 0.4 ? 'crustacean' : g[G.VENOM] > 0.3 ? 'scorpion' : g[G.SHELL] > 0.5 && aquatic ? 'trilobite' : g[G.SHELL] > 0.45 ? 'beetle' : 'insect', producer };
+  if (legs && !aquatic && g[G.SHELL] > 0.6 && size > 0.4) return { arch: 'turtle', variant: '', producer };
+  if (!legs && !aquatic && g[G.LIMBS] < 0.25 && g[G.SEGMENTS] > 0.4 && (g[G.CRAWL] > 0.3 || g[G.WALK] > 0.3) && size >= 0.4) return { arch: 'snake', variant: '', producer };
+  if (legs && g[G.SWIM] > 0.5 && g[G.GILLS] < 0.5 && size > 1 && g[G.ENDOTHERM] < 0.4) return { arch: 'croc', variant: '', producer };
+  if (legs && !aquatic && g[G.HORNS] > 0.5 && g[G.ARMOR] > 0.3 && g[G.HERB] > 0.6 && size > 3) return { arch: 'quadruped', variant: 'trike', producer };
+  if (legs && !aquatic && g[G.ARMOR] > 0.5 && g[G.TAIL] > 0.5 && g[G.HERB] > 0.6 && size > 3) return { arch: 'quadruped', variant: 'stego', producer };
   if (legs && !aquatic) return g[G.INTEL] > 0.5 && g[G.LIMBS] > 0.75 ? { arch: 'biped', variant: 'hominid', producer } : { arch: 'quadruped', variant: g[G.ENDOTHERM] > 0.4 ? 'mammal' : size > 5 && g[G.HERB] > 0.5 ? 'sauropod' : 'lizard', producer };
   if (g[G.SWIM] > 0.3 && g[G.EYES] > 0.65 && g[G.INTEL] > 0.3 && g[G.FINS] < 0.45) return { arch: 'squid', variant: '', producer };
   if (g[G.SWIM] > 0.3 && (g[G.FINS] > 0.2 || g[G.HEAD] > 0.4 || g[G.TAIL] > 0.3)) return size > 8 && g[G.ENDOTHERM] > 0.4 ? { arch: 'whale', variant: '', producer } : { arch: 'fish', variant: g[G.ARMOR] > 0.45 ? 'armored' : '', producer };
@@ -220,7 +226,16 @@ const fish: Painter = (c, d, p) => {
   if (g[G.CAMO] < 0.3 && g[G.PATTERN] > 0.55) for (let x = Math.round(x0 + L * 0.3); x < x1 - L * 0.2; x += 4) c.line(x, cy - Hh * 0.6 + wob(x), x + 1, cy + Hh * 0.1 + wob(x), P.ACCENT);
 };
 
+const plesio: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, cy = c.h * 0.55, bw = L * 0.26, bh = L * 0.14, sw = Math.sin(p.ph);
+  c.disc(cx - L * 0.05, cy, bw, bh, P.BASE); for (let x = Math.round(cx - bw); x < cx + bw * 0.8; x++) c.set(x, cy + bh * 0.6, P.BELLY);
+  for (let i = 0; i < L * 0.3; i++) { const t = i / (L * 0.3); c.disc(cx - bw - i * 0.9, cy + t * 2 + sw * t * 1.5, Math.max(0.7, (1 - t) * bh * 0.45), Math.max(0.7, (1 - t) * bh * 0.45), P.BASE); }
+  let nx = cx + bw * 0.7, ny = cy - bh * 0.3; const n = Math.floor(L * 0.38); for (let i = 0; i < n; i++) { const t = i / n; nx += 0.9; ny -= 0.45 * (1 - t) + sw * 0.1; c.disc(nx, ny, 1.2, 1.2, P.BASE); }
+  c.disc(nx + 1, ny - 1, L * 0.065 + 0.6, L * 0.055 + 0.5, P.BASE); c.line(nx + 2, ny, nx + 3 + L * 0.06, ny + p.atk * 2, P.BASE, 2); eye(c, nx + 1.5, ny - 1.5, 0.9); if (d.g[G.JAWS] > 0.3) c.set(nx + L * 0.07, ny + 1 + p.atk, P.TOOTH);
+  for (const [fx, col] of [[cx + bw * 0.5, P.ACCENT], [cx - bw * 0.6, P.SHADE]] as [number, number][]) { const a = sw * 0.6; c.tri(fx, cy + bh * 0.5, fx + 3, cy + bh * 0.5, fx - 3 + a * 3, cy + bh * 1.5 + a * 2, col); c.tri(fx, cy + bh * 0.4, fx + 3, cy + bh * 0.4, fx + 6 - a * 3, cy + bh * 1.4 - a * 2, P.DARK); }
+};
 const whale: Painter = (c, d, p) => {
+  if (d.variant === 'plesio') return plesio(c, d, p);
   const g = d.g, L = d.L, cx = c.w / 2 - 0.5, cy = c.h * 0.46, Hh = L * 0.17, x0 = cx - L * 0.5, x1 = cx + L * 0.5, bend = Math.sin(p.ph) * L * 0.05;
   c.profile(x0 + L * 0.12, x1, (x) => { const t = (x - x0) / L; const hh = Hh * Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.98 + 0.02)), 0.7) * (t < 0.2 ? 0.45 + t * 2.7 : 1); const w = bend * Math.max(0, 0.5 - t) * 2; return [cy - hh + w, cy + hh * 0.85 + w]; }, P.BASE);
   for (let x = Math.round(x0 + L * 0.3); x < x1 - 2; x++) for (let y = 0; y < c.h; y++) if (c.get(x, y) === P.BASE && y > cy + Hh * 0.25) c.set(x, y, P.BELLY);
@@ -256,6 +271,8 @@ const quadruped: Painter = (c, d, p) => {
   if (!lizard && !sauropod) { c.tri(hx - hr * 0.4, hy - hr * 0.8, hx + hr * 0.1, hy - hr * 0.8, hx - hr * 0.2, hy - hr * 1.7, P.SHADE); }
   if (mammoth) { c.line(hx + hr, hy + hr * 0.5, hx + hr + snout * 0.6, hy + hr * 2.4, P.BASE, 2); c.tri(hx + hr, hy + hr * 0.3, hx + hr + L * 0.12, hy + hr * 0.2, hx + hr + L * 0.14, hy + hr * 1.6, P.TOOTH); }
   if (g[G.HORNS] > 0.3) { const hl = L * (0.05 + g[G.HORNS] * 0.12); c.tri(hx, hy - hr * 0.9, hx + hr * 0.6, hy - hr * 0.7, hx + hr * 0.5 + hl * 0.4, hy - hr * 0.9 - hl, P.TOOTH); if (g[G.HORNS] > 0.5) c.tri(hx + hr * 0.9, hy - hr * 0.7, hx + hr * 1.4, hy - hr * 0.4, hx + hr * 1.6 + hl * 0.3, hy - hr * 0.7 - hl * 0.8, P.TOOTH); }
+  if (v === 'stego') for (let x = Math.round(bx0 + 3); x < bx1 - 1; x += 3) { const hgt = L * 0.14 * (1 - Math.abs((x - (bx0 + bx1) / 2) / bodyL) * 1.2); c.tri(x, by - bodyH * 0.5, x + 3, by - bodyH * 0.5, x + 1.5, by - bodyH * 0.5 - hgt, P.ACCENT); }
+  if (v === 'trike') { c.disc(hx - hr * 0.2, hy - hr * 0.4, hr * 1.5, hr * 1.7, P.ACCENT); c.disc(hx - hr * 0.2, hy - hr * 0.4, hr * 1.1, hr * 1.3, P.BASE); c.tri(hx + hr, hy - hr * 0.2, hx + hr + L * 0.14, hy - hr * 0.5, hx + hr + L * 0.02, hy - hr * 0.7, P.TOOTH); c.tri(hx + hr * 0.2, hy - hr * 0.9, hx + hr * 0.8, hy - hr * 0.9, hx + hr * 0.7 + L * 0.05, hy - hr * 2.1, P.TOOTH); }
   if (g[G.ARMOR] > 0.3 || g[G.SHELL] > 0.3) for (let x = Math.round(bx0 + 2); x < bx1 - 2; x += 3) c.tri(x, by - bodyH * 0.5, x + 2, by - bodyH * 0.5, x + 1, by - bodyH * 0.5 - 2 - g[G.ARMOR] * 3, P.ACCENT);
   if (g[G.PATTERN] > 0.55 && g[G.CAMO] < 0.4) for (let x = Math.round(bx0 + 3); x < bx1 - 2; x += 4) c.line(x, by - bodyH * 0.35, x + 1, by + bodyH * 0.1, P.DARK);
 };
@@ -321,7 +338,75 @@ const tree: Painter = (c, d, p) => {
   else { const R = c.w * 0.3; for (let k = 0; k < 6; k++) { const a = (k / 6) * 6.283; c.disc(cx + Math.cos(a) * R * 0.7 + sw, base - trunkH - R * 0.6 + Math.sin(a) * R * 0.55, R * 0.62, R * 0.55, k % 2 ? P.BASE : P.SHADE); } c.disc(cx + sw, base - trunkH - R * 0.7, R * 0.8, R * 0.62, P.BASE); for (let k = 0; k < 8; k++) c.set(cx + sw + Math.cos(k * 1.1) * R * 0.7, base - trunkH - R * 0.9 + Math.sin(k * 1.7) * R * 0.4, P.LIGHT); if (d.g[G.PATTERN] > 0.7) for (let k = 0; k < 5; k++) c.set(cx + sw + Math.cos(k * 2.3) * R, base - trunkH - R * 0.6 + Math.sin(k * 1.9) * R * 0.5, P.ACCENT); }
 };
 
-const PAINTERS: Record<string, Painter> = { micro, colony, mat, jelly, sessile, worm, arthropod, snail, squid, fish, whale, quadruped, biped, bird, kelp, moss, grass, fern, tree };
+
+// ---- more land/air body plans
+const turtle: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, gy = c.h - 2, domeH = L * 0.32, domeW = L * 0.36, sw = Math.sin(p.ph) * 1.6, by = gy - L * 0.12;
+  for (const [x, off, col] of [[cx - domeW * 0.6, 0, P.DARK], [cx + domeW * 0.5, 3.14, P.DARK], [cx - domeW * 0.3, 1.6, P.SHADE], [cx + domeW * 0.7, 4.7, P.SHADE]] as [number, number, number][]) { const s2 = Math.sin(p.ph + off) * 1.6; c.line(x, by, x + s2, gy, col, 2); c.line(x + s2 - 1, gy, x + s2 + 1, gy, col, 1); }
+  c.profile(cx - domeW, cx + domeW, (x) => { const t = (x - cx) / domeW; return [by - domeH * Math.sqrt(Math.max(0, 1 - t * t)), by]; }, P.ACCENT);
+  c.profile(cx - domeW + 1, cx + domeW - 1, (x) => { const t = (x - cx) / domeW; return [by - domeH * Math.sqrt(Math.max(0, 1 - t * t)) + 1, by - 1]; }, P.BASE);
+  for (let i = -2; i <= 2; i++) { c.line(cx + i * domeW * 0.38, by - domeH * 0.1, cx + i * domeW * 0.3, by - domeH * 0.85 * Math.sqrt(Math.max(0, 1 - (i * 0.4) ** 2)), P.DARK); }
+  c.line(cx - domeW * 0.8, by - domeH * 0.55, cx + domeW * 0.8, by - domeH * 0.55, P.DARK);
+  const hx = cx + domeW + 1 + p.atk * 2 + sw * 0.3, hy = by - domeH * 0.35; c.line(cx + domeW * 0.8, by - domeH * 0.2, hx, hy, P.SHADE, Math.max(2, L * 0.1)); c.disc(hx + 1, hy, L * 0.09 + 0.8, L * 0.08 + 0.7, P.SHADE); eye(c, hx + 2, hy - 1, 0.9);
+  c.tri(cx - domeW, by - 1, cx - domeW - L * 0.12, by, cx - domeW, by + 1, P.SHADE);
+};
+const frog: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, gy = c.h - 2, jump = Math.max(0, Math.sin(p.ph)) * L * 0.18, by = gy - L * 0.2 - jump, bw = L * 0.34, bh = L * 0.2;
+  c.disc(cx, by, bw, bh, P.BASE); c.disc(cx + bw * 0.7, by - bh * 0.1, bw * 0.55, bh * 0.75, P.BASE);
+  for (let x = Math.round(cx - bw * 0.6); x < cx + bw * 0.6; x++) c.set(x, by + bh * 0.5, P.BELLY);
+  const kx = cx - bw * 0.2, hx = cx - bw * 0.9; c.line(cx - bw * 0.3, by + bh * 0.3, kx, gy - L * 0.18 - jump * 0.5, P.SHADE, Math.max(2, L * 0.1)); c.line(kx, gy - L * 0.18 - jump * 0.5, hx - jump * 0.5, gy - jump * 0.3, P.SHADE, Math.max(1, L * 0.07));
+  c.line(cx + bw * 0.55, by + bh * 0.4, cx + bw * 0.8, gy - jump * 0.2, P.DARK, 1); eye(c, cx + bw * 0.85, by - bh * 0.85, Math.max(1.1, L * 0.06)); eye(c, cx + bw * 0.35, by - bh * 0.95, Math.max(1, L * 0.05));
+  c.line(cx + bw * 1.15, by + bh * 0.1, cx + bw * 0.6, by + bh * 0.2 + p.atk * 1.5, P.GORE); if (p.atk > 0.5) c.line(cx + bw * 1.15, by + bh * 0.1, cx + bw * 1.9, by - 1, P.ORGAN);
+  for (let i = 0; i < 4; i++) c.set(cx - bw * 0.4 + i * 2, by - bh * 0.6, P.ACCENT);
+};
+const croc: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, gy = c.h - 2, bodyH = L * 0.13, bx0 = cx - L * 0.5, bx1 = cx + L * 0.12, by = gy - L * 0.1 - bodyH * 0.5 + Math.round(Math.sin(p.ph * 2) * 0.4);
+  const leg = (x: number, off: number, col: number) => { const s2 = Math.sin(p.ph + off) * 2.4; c.line(x, by + bodyH * 0.4, x + s2 * 0.5 + 1, gy - 1, col, 2); c.line(x + s2 * 0.5 + 1, gy - 1, x + s2 + 3, gy, col, 1); };
+  leg(bx0 + L * 0.2, 0, P.DARK); leg(bx1 - 4, 3.1, P.DARK);
+  c.profile(bx0, bx1, (x) => { const t = (x - bx0) / (bx1 - bx0); const h = bodyH * 0.5 * (0.85 + 0.35 * Math.sin(t * Math.PI)); return [by - h, by + h]; }, P.BASE);
+  for (let i = 0; i < L * 0.45; i++) { const t = i / (L * 0.45); c.disc(bx0 - i, by + Math.sin(p.ph + i * 0.2) * t * 2, Math.max(0.6, (1 - t) * bodyH * 0.45), Math.max(0.6, (1 - t) * bodyH * 0.45), P.BASE); if (i % 3 === 0) c.set(bx0 - i, by - bodyH * 0.45 * (1 - t) - 1, P.SHADE); }
+  for (let x = Math.round(bx0 + 2); x < bx1 - 2; x += 2) c.set(x, by - bodyH * 0.6, P.SHADE);
+  const hx0 = bx1 - 1, snout = L * 0.3; c.profile(hx0, hx0 + snout, (x) => { const t = (x - hx0) / snout; return [by - bodyH * (0.45 - t * 0.12) - (t < 0.25 ? 1 : 0), by + bodyH * 0.2 + p.atk * 2.2 * t]; }, P.BASE);
+  c.line(hx0, by + bodyH * 0.25 + p.atk * 2, hx0 + snout, by + bodyH * 0.2 + p.atk * 2.2, P.GORE); for (let i = 0; i < 5; i++) c.set(hx0 + snout - 1 - i * 2.2, by + bodyH * 0.2 + (p.atk > 0.5 ? 1 : 0), P.TOOTH);
+  eye(c, hx0 + 2, by - bodyH * 0.6, Math.max(1, L * 0.03)); c.set(hx0 + snout, by - bodyH * 0.3, P.DARK);
+};
+const snake: Painter = (c, d, p) => {
+  const L = d.L, cy = c.h / 2 - 0.5, th = Math.max(1.6, L * 0.075), amp = L * 0.11 + 0.6, K = 6.3 / (L * 0.5 + 3);
+  for (let x = 2; x < c.w - 4; x++) { const t = (x - 2) / (c.w - 7); const rr = th * (0.35 + 0.9 * Math.sin(Math.min(1, t * 1.05) * 1.4 + 0.1)) * (t < 0.1 ? 0.5 + t * 5 : 1); const y = cy + Math.sin(x * K - p.ph * 1.2) * amp * (0.5 + t * 0.5); c.disc(x, y, 0.7, rr, P.BASE); if (x % 4 < 2 && d.g[G.PATTERN] > 0.3) c.disc(x, y - rr * 0.4, 0.6, rr * 0.4, P.ACCENT); }
+  const hx = c.w - 4, hy = cy + Math.sin(hx * K - p.ph * 1.2) * amp; c.disc(hx + 1, hy, th * 1.15, th * 0.95, P.BASE); eye(c, hx + 1.5, hy - 1, Math.max(0.8, th * 0.35));
+  const tl = 2 + p.atk * 3 + Math.max(0, Math.sin(p.ph * 2)) * 1.5; c.line(hx + th + 1, hy, hx + th + 1 + tl, hy, P.GORE); c.set(hx + th + 1 + tl, hy - 1, P.GORE); c.set(hx + th + 1 + tl, hy + 1, P.GORE);
+  if (d.g[G.VENOM] > 0.4 && p.atk > 0.5) { c.set(hx + th, hy + 1, P.TOOTH); }
+};
+const bat: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, cy = c.h * 0.5, fl = Math.sin(p.ph * 1.7), pter = d.variant === 'pterosaur';
+  const bw = L * (pter ? 0.2 : 0.17), bh = L * 0.12; c.disc(cx, cy, bw, bh, P.BASE);
+  const hx = cx + bw * 0.9, hy = cy - bh * 0.5; c.disc(hx, hy, L * 0.08 + 0.8, L * 0.07 + 0.7, P.BASE);
+  if (pter) { c.tri(hx + L * 0.04, hy - 1, hx + L * 0.28, hy + 1 + p.atk * 1.5, hx + L * 0.04, hy + L * 0.06, P.ACCENT2); c.tri(hx - L * 0.04, hy - L * 0.04, hx - L * 0.2, hy - L * 0.12, hx, hy + 1, P.ACCENT); } else { c.tri(hx - 1, hy - L * 0.05, hx + 1, hy - L * 0.05, hx, hy - L * 0.17, P.SHADE); c.tri(hx + 2, hy - L * 0.05, hx + 3, hy - L * 0.02, hx + 4, hy - L * 0.16, P.SHADE); }
+  eye(c, hx + 1, hy - 0.5, Math.max(0.8, L * 0.035));
+  for (const [sgn, col] of [[1, P.ACCENT], [-1, P.SHADE]] as [number, number][]) { const ty = cy - L * (0.05 + 0.22 * fl) - L * 0.05, tx = cx - sgn * L * 0.45 + 1; c.tri(cx + sgn * 0.5, cy - bh * 0.5, tx - sgn * 0, ty, cx - L * 0.28 * (sgn > 0 ? 1 : 0.4), cy + bh * 0.4, col); c.line(cx, cy - bh * 0.5, tx, ty, P.DARK); c.line(tx, ty, cx - L * 0.28, cy + bh * 0.4, P.DARK); }
+  c.line(cx - bw * 0.7, cy + bh * 0.6, cx - bw * 0.9, cy + bh * 1.6, P.DARK); c.line(cx + bw * 0.1, cy + bh * 0.6, cx, cy + bh * 1.6, P.DARK);
+  c.line(cx - bw, cy, cx - bw - L * (pter ? 0.12 : 0.1), cy + 1, P.DARK);
+};
+const butterfly: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, cy = c.h / 2 - 0.5, fl = Math.sin(p.ph * 2); const wv = 0.3 + 0.7 * Math.abs(fl);
+  for (const [sgn, col] of [[-1, P.SHADE], [1, P.ACCENT]] as [number, number][]) { c.disc(cx - L * 0.12, cy + sgn * L * 0.25 * wv - sgn * 0.5, L * 0.22, L * 0.28 * wv, col); c.disc(cx + L * 0.08, cy + sgn * L * 0.18 * wv, L * 0.15, L * 0.18 * wv, P.ACCENT2); }
+  c.disc(cx - L * 0.1, cy, L * 0.07, L * 0.07, P.OUT); c.profile(cx - L * 0.22, cx + L * 0.18, () => [cy - 1, cy + 0.5], P.BASE); c.disc(cx + L * 0.2, cy, 1.4, 1.4, P.BASE); c.line(cx + L * 0.22, cy - 1, cx + L * 0.35, cy - L * 0.18, P.DARK);
+  for (let i = 0; i < 4; i++) c.set(cx - L * 0.2 + i * 2, cy + (i % 2 ? -1 : 1) * L * 0.2 * wv, P.EYE);
+};
+const spider: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, cy = c.h * 0.45;
+  for (let i = 0; i < 8; i++) { const sd = i < 4 ? 1 : -1, k = i % 4, ang = -0.5 + k * 0.45, s2 = Math.sin(p.ph + k * 1.7 + (i < 4 ? 0 : 3)) * 1.4; const kx = cx + Math.cos(ang) * L * 0.3 * sd * 0.9 + (i < 4 ? 1 : -1) * 0 + (sd * 0), ky = cy - L * 0.12 - k * 0.5; c.line(cx + (k - 1.5) * 1.2, cy, cx + (k - 1.5) * L * 0.2 * (sd) * 0 + sd * L * 0.3 + (k - 1.5) * 2, cy - L * 0.18, P.DARK); c.line(cx + sd * L * 0.3 + (k - 1.5) * 2, cy - L * 0.18, cx + sd * L * 0.4 + (k - 1.5) * 2.5 + s2, c.h - 2, P.DARK); void kx; void ky; }
+  c.disc(cx - L * 0.15, cy, L * 0.22, L * 0.18, P.BASE); c.disc(cx + L * 0.2, cy - 1, L * 0.14, L * 0.11, P.SHADE); for (let i = 0; i < 4; i++) c.set(cx + L * 0.27 + (i % 2), cy - 2 + (i >> 1) * 1.5, P.EYE); c.set(cx + L * 0.27, cy - 2, P.PUPIL);
+  c.set(cx - L * 0.2, cy - 1, P.ACCENT); c.set(cx - L * 0.12, cy, P.ACCENT); if (p.atk > 0.5) c.line(cx + L * 0.32, cy, cx + L * 0.38, cy + 3, P.TOOTH);
+};
+const ant: Painter = (c, d, p) => {
+  const L = d.L, cx = c.w / 2 - 0.5, cy = c.h * 0.45, bob = Math.round(Math.sin(p.ph * 2) * 0.5);
+  for (let i = 0; i < 3; i++) for (const sgn of [-1, 1]) { const s2 = Math.sin(p.ph + i * 2.1 + (sgn > 0 ? 0 : 3.14)) * 1.5; c.line(cx - L * 0.08 + i * L * 0.1, cy + bob, cx - L * 0.08 + i * L * 0.1 + sgn * 2 + s2, cy + L * 0.17 + bob, P.DARK); c.line(cx - L * 0.08 + i * L * 0.1 + sgn * 2 + s2, cy + L * 0.17 + bob, cx - L * 0.08 + i * L * 0.1 + sgn * 3.5 + s2 * 1.4, c.h - 2, P.DARK); }
+  c.disc(cx - L * 0.32, cy + bob, L * 0.2, L * 0.14, P.BASE); c.disc(cx - L * 0.02, cy + bob, L * 0.1, L * 0.08, P.SHADE); c.disc(cx + L * 0.28, cy - 1 + bob, L * 0.13, L * 0.11, P.BASE);
+  eye(c, cx + L * 0.33, cy - 2 + bob, 0.9); c.line(cx + L * 0.4, cy + bob, cx + L * 0.45, cy + 2 + p.atk * 2 + bob, P.TOOTH); c.line(cx + L * 0.35, cy - L * 0.08 + bob, cx + L * 0.5, cy - L * 0.2 + bob, P.DARK);
+};
+
+const PAINTERS: Record<string, Painter> = { micro, colony, mat, jelly, sessile, worm, arthropod, snail, squid, fish, whale, quadruped, biped, bird, kelp, moss, grass, fern, tree, turtle, frog, croc, snake, bat, butterfly, spider, ant };
 
 // ---------------------------------------------------------------------------------- layout
 interface Layout { w: number; h: number; ref: number; }
@@ -342,6 +427,14 @@ function layout(arch: string, L: number): Layout {
     case 'quadruped': return { w: Math.round(L * 1.35) + 8, h: Math.round(L * 0.95) + 6, ref: L };
     case 'biped': return { w: Math.round(L * 0.9) + 6, h: Math.round(L * 1.05) + 5, ref: L };
     case 'bird': return { w: Math.round(L * 1.1) + 8, h: Math.round(L * 0.8) + 8, ref: L };
+    case 'turtle': return { w: Math.round(L * 1.15) + 8, h: Math.round(L * 0.7) + 6, ref: L };
+    case 'frog': return { w: Math.round(L * 1.1) + 8, h: Math.round(L * 0.75) + 6, ref: L };
+    case 'croc': return { w: Math.round(L * 1.2) + 8, h: Math.round(L * 0.45) + 6, ref: L };
+    case 'snake': return { w: L + 8, h: Math.round(L * 0.45) + 8, ref: L };
+    case 'bat': return { w: Math.round(L * 1.1) + 8, h: Math.round(L * 0.9) + 8, ref: L };
+    case 'butterfly': return { w: L + 6, h: Math.round(L * 0.9) + 6, ref: L };
+    case 'spider': return { w: Math.round(L * 1.2) + 8, h: Math.round(L * 0.65) + 6, ref: L };
+    case 'ant': return { w: L + 8, h: Math.round(L * 0.65) + 8, ref: L };
     case 'kelp': return { w: Math.round(L * 0.45) + 8, h: L + 5, ref: L };
     case 'moss': return { w: L + 4, h: Math.round(L * 0.5) + 5, ref: L };
     case 'grass': return { w: Math.round(L * 0.55) + 6, h: L + 4, ref: L };

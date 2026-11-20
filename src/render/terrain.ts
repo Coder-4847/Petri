@@ -141,14 +141,17 @@ function paintGround(def: BiomeDef, medium: Uint8Array): HTMLCanvasElement {
   const pal = (m: number): MediumPal => def.pal[m] ?? DEFAULT_PAL[m] ?? DEFAULT_PAL[5];
   const pk = (c: number) => (255 << 24) | (hexB(c) << 16) | (hexG(c) << 8) | hexR(c);
 
-  // depth below the exposed top surface, per cell, and cave detection (air beneath ground)
+  // depth below the exposed top surface, per cell, and cave detection: air is a cave only when ground is
+  // above it AND below it (so the sky under a floating island stays sky)
   const dtop = new Uint8Array(W * H), cave = new Uint8Array(W * H);
   for (let x = 0; x < W; x++) {
-    let d = 0, roofed = false;
+    let d = 0, roofed = false, nextSolid = 1e9;
+    const below = new Int16Array(H); // distance to the next solid cell below
+    for (let y = H - 1; y >= 0; y--) { if (IS_SOLID[medium[y * W + x]]) nextSolid = y; below[y] = nextSolid === 1e9 ? 9999 : nextSolid - y; }
     for (let y = 0; y < H; y++) {
       const i = y * W + x, s = IS_SOLID[medium[i]];
       if (s) { d = Math.min(255, d + 1); roofed = true; dtop[i] = d; }
-      else { d = 0; if (roofed && medium[i] !== LAVA) cave[i] = 1; }
+      else { d = 0; if (roofed && !def.noFloor && medium[i] !== LAVA && below[y] < 45) cave[i] = 1; }
     }
   }
   // palettes darken with depth (16 dithered buckets) so the underground reads as deep

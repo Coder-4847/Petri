@@ -68,7 +68,7 @@ export class Renderer {
       this.worldC.addChild(this.terrain.ground, this.fx.stains, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       const horizon = def.terrain.water > 0 ? def.terrain.water * H : Math.min(...Array.from(m.surfaceY).filter((v) => v < H), H * 0.5);
       this.bg.build(def, horizon);
-      this.ambient.setWorld(def, m.medium); this.fx.setWorld(m.medium);
+      this.ambient.setVents(m.vents); this.ambient.setWorld(def, m.medium); this.fx.setWorld(m.medium);
       this.lighting.setAmbient(def.light);
       this.creatures.reset();
     } else {
