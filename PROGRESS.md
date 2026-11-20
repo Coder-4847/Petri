@@ -54,4 +54,23 @@
 - The individual model is calibrated on small test communities; radiation daughters in the full model sometimes fail to establish.
 - Hominids/civilization need Phase 7 hooks (era index 9+).
 
-## Next: Phase 4 — Procedural Pixel Creatures and Behavior
+## Phase 4: Procedural Pixel Creatures and Behavior — DONE
+- `render/canvas8.ts` + `render/spritegen.ts`: genome → body plan classification → painter → shading, pattern, outline.
+  19 painters: microbes (7 forms), colonies, mats, jellies, sessile animals (sponge/coral/anemone/clam), worms/eels,
+  arthropods (trilobite, crustacean, beetle, scorpion, insect with wings), snails, squid, fish (jaws, armour, spines,
+  bioluminescence, countershading), whales, quadrupeds (lizard, mammal, sauropod, cat, mammoth), bipeds (hominid,
+  theropod), birds, kelp, moss, grass, ferns, trees. Proportions, fins, horns, plates, patterns, colours and eyes all
+  come from genes, so every evolved species looks different.
+- 9 frames per species: 4-frame move cycle, attack/feeding, dead (exposed organs and bone), bones, clean dead, LOD dot
+- Carcasses: dead frame → decay tint → bleached skeleton; scavenged and decomposed by the sim
+- `render/fx.ts`: blood spurts, gibs (organs, bone chips) with physics, blood clouds in water, lasting ground stains;
+  settings panel with a gore toggle (default on, persisted)
+- `data/templates.ts`: 42 templates (8 microbes, 6 plants/algae, 17 invertebrates, 11 fish/marine, 3 insects …)
+- `#gallery` dev page shows every sprite and frame; behaviours (wander, sense, hunt, flee, herd, fight, eat, scavenge, rest)
+  from Phase 2 drive the attack/feeding frames
+
+### Known issues
+- Blood clouds are low-res squares (fits the style, could be softer); plant "dead" frames are placeholders (plants vanish).
+- Hit/kill events are sent for every creature in view; very dense fights cap at 500 events per frame.
+
+## Next: Phase 5 — Full Biomes and Animal Roster

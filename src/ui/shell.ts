@@ -2,12 +2,14 @@ import { icon } from './icons';
 import { BIOMES, ENV_KEYS, BIOME_BY_ID, type Env } from '../data/biomes';
 import { ERAS } from '../data/eras';
 import { css, mix } from '../render/util';
+import { settings, saveSettings } from './settings';
 import './style.css';
 
 export interface ShellHooks {
   onSpeed(v: number): void;
   onBiome(id: string): void;
   onEnv(key: keyof Env, value: number): void;
+  onSettings(): void;
 }
 
 export interface LifeRow { id: number; name: string; color: number; role: string; size: number; pop: number; }
@@ -49,12 +51,12 @@ export class Shell {
 
   constructor(private hooks: ShellHooks) {
     this.root.innerHTML = '';
-    this.buildTop(); this.buildDock(); this.buildBiomePanel(); this.buildTweakPanel(); this.buildLifePanel();
+    this.buildTop(); this.buildDock(); this.buildBiomePanel(); this.buildTweakPanel(); this.buildLifePanel(); this.buildSettingsPanel();
     this.toasts = el('div', 'toasts'); this.root.appendChild(this.toasts);
-    this.debugEl = el('div', 'debug'); this.root.appendChild(this.debugEl);
+    this.debugEl = el('div', 'debug'); this.root.appendChild(this.debugEl); this.debugEl.style.display = settings.debug ? '' : 'none';
     const hint = el('div', 'hint'); hint.innerHTML = 'drag to pan · scroll to zoom · <b style="color:var(--dim);font-weight:400">`</b> debug'; this.root.appendChild(hint);
     window.addEventListener('keydown', (e) => {
-      if (e.key === '`') this.debugEl.style.display = this.debugEl.style.display === 'none' ? '' : 'none';
+      if (e.key === '`') { settings.debug = this.debugEl.style.display === 'none'; this.debugEl.style.display = settings.debug ? '' : 'none'; saveSettings(); this.syncSettingsUi(); }
       if (e.key === ' ') { e.preventDefault(); this.setSpeed(this.speed === 0 ? 1 : 0); }
       if (e.key === 'Escape') this.closePanels();
     });
@@ -71,7 +73,9 @@ export class Shell {
       const b = el('button', 'btn'); b.title = s.title; b.innerHTML = s.ico ? icon(s.ico, 16) : s.label;
       b.onclick = () => this.setSpeed(s.v); sp.appendChild(b); this.speedBtns.push(b);
     }
-    bar.appendChild(sp); this.root.appendChild(bar); this.setSpeed(1, false);
+    bar.appendChild(sp);
+    const gear = el('button', 'btn ghost'); gear.title = 'Settings'; gear.innerHTML = icon('gear', 16); gear.onclick = () => this.togglePanel('settings'); bar.appendChild(gear);
+    this.root.appendChild(bar); this.setSpeed(1, false);
     this.setEra(0, 0);
   }
 
@@ -117,6 +121,21 @@ export class Shell {
   }
 
   setBiome(id: string) { this.biomeId = id; this.biomeBtns.forEach((b, k) => b.classList.toggle('on', k === id)); }
+
+  // ---- settings
+  private settingEls = new Map<string, HTMLElement>();
+  private buildSettingsPanel() {
+    const p = el('div', 'panel narrow'); p.innerHTML = `<h3>Settings</h3>`;
+    const row = (key: 'gore' | 'debug', label: string, hint: string) => {
+      const r = el('label', 'setting'); r.innerHTML = `<span><b>${label}</b><i>${hint}</i></span><button class="tog"></button>`;
+      const b = r.querySelector('button')!; b.onclick = () => { (settings as any)[key] = !(settings as any)[key]; saveSettings(); this.syncSettingsUi(); this.hooks.onSettings(); if (key === 'debug') this.debugEl.style.display = settings.debug ? '' : 'none'; };
+      this.settingEls.set(key, b); p.appendChild(r);
+    };
+    row('gore', 'Gore', 'Blood, gibs, bones and wounds when creatures are hurt or killed.');
+    row('debug', 'Debug overlay', 'Frame rate, entity counts and simulation timing. Shortcut: `');
+    this.root.appendChild(p); this.panels.set('settings', p); this.syncSettingsUi();
+  }
+  syncSettingsUi() { this.settingEls.forEach((b, k) => b.classList.toggle('on', (settings as any)[k])); }
 
   // ---- environment sliders
   private buildTweakPanel() {

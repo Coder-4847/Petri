@@ -1,8 +1,10 @@
 import { Renderer } from './render/renderer';
 import { Shell } from './ui/shell';
+import { settings } from './ui/settings';
 import type { FromWorker } from './shared/protocol';
 
 async function boot() {
+  if (location.hash === '#gallery') { const { showGallery } = await import('./ui/gallery'); showGallery(); return; }
   const stage = document.getElementById('stage')!;
   const renderer = new Renderer();
   await renderer.init(stage);
@@ -15,9 +17,11 @@ async function boot() {
     onSpeed: (v) => send({ t: 'speed', v }),
     onBiome: (id) => send({ t: 'biome', id }),
     onEnv: (key, value) => send({ t: 'env', key, value }),
+    onSettings: () => renderer.setGore(settings.gore),
   });
 
   renderer.onViewChange = (v) => send({ t: 'view', ...v });
+  renderer.setGore(settings.gore);
 
   const roleOf = (g: number[]) => (g[18] >= Math.max(g[21], g[22], g[23], g[20], g[24]) && g[18] > 0.35) || g[19] > 0.4 ? 'producer' : g[22] > 0.4 ? 'predator' : g[21] > 0.4 && g[22] > 0.25 ? 'omnivore' : g[21] > 0.4 ? 'grazer' : g[23] > 0.4 ? 'decomposer' : g[20] > 0.4 ? 'filter feeder' : 'consumer';
   let lastEnvBiome = '';
@@ -34,7 +38,7 @@ async function boot() {
     const m = ev.data;
     switch (m.t) {
       case 'world': renderer.setWorld(m as any); shell.setBiome((m as any).biome); document.getElementById('boot')?.classList.add('gone'); break;
-      case 'frame': renderer.creatures.onFrame((m as any).data, (m as any).n, (m as any).tick, performance.now()); break;
+      case 'frame': renderer.creatures.onFrame((m as any).data, (m as any).n, (m as any).tick, performance.now()); if ((m as any).events?.length) renderer.fx.onEvents((m as any).events, renderer.cam.view()); break;
       case 'species': renderer.creatures.setSpecies((m as any).list); break;
       case 'stats': onStats((m as any).stats); break;
       case 'toast': shell.toast((m as any).kind, (m as any).text, (m as any).sub); break;

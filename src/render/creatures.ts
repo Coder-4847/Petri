@@ -5,6 +5,8 @@ import { Atlas } from './atlas';
 import { generateSprite, type SpriteSet } from './spritegen';
 import type { Camera } from './camera';
 
+const decayTint = (fresh: number) => { const t = 1 - fresh; const r = 255 - t * 110, g = 255 - t * 55, b = 255 - t * 125; return ((r | 0) << 16) | ((g | 0) << 8) | (b | 0); };
+
 interface SpeciesSprites { set: SpriteSet; page: number; tex: Texture[]; dot: Texture; nMove: number; }
 
 /**
@@ -27,6 +29,7 @@ export class CreatureLayer {
   private cx = new Float32Array(ENT_CAP); private cy = new Float32Array(ENT_CAP);
   private tArrive = 0; private interval = 33;
   visible = 0;
+  gore = true;
 
   constructor() { for (const g of this.groups) this.root.addChild(g); }
 
@@ -47,9 +50,9 @@ export class CreatureLayer {
     let s = this.sprites.get(id);
     if (s) return s;
     const info = this.info.get(id); if (!info) return null;
-    const set = generateSprite(info.genome);
+    const set = generateSprite(info.genome, info.template);
     const { page, tex } = this.atlas.add(set.frames);
-    s = { set, page, tex: tex.slice(0, -1), dot: tex[tex.length - 1], nMove: tex.length - 1 };
+    s = { set, page, tex: tex.slice(0, -1), dot: tex[tex.length - 1], nMove: 4 };
     this.sprites.set(id, s);
     return s;
   }
@@ -69,7 +72,7 @@ export class CreatureLayer {
     const used = this.used;
     for (let l = 0; l < 3; l++) for (let p = 0; p < this.containers[l].length; p++) used[l][p] = 0;
     const t = Math.min(1, (now - this.tArrive) / this.interval);
-    const zoom = cam.zoom, data = this.cur;
+    const zoom = cam.zoom, data = this.cur, gore = this.gore;
     let vis = 0;
     for (let i = 0; i < this.curN; i++) {
       const o = i * FRAME_STRIDE;
@@ -90,9 +93,10 @@ export class CreatureLayer {
       if (screenPx < 3.2) {
         p.texture = sp.dot; const d = Math.max(1.8, screenPx) / zoom / 2; p.scaleX = d; p.scaleY = d; p.rotation = 0; p.tint = sp.set.color;
       } else {
-        p.texture = sp.tex[(packed & 15) % sp.nMove];
+        const st = (packed >> 13) & 7;
+        p.texture = kind === 3 ? sp.tex[st === 1 ? 6 : gore ? 5 : 7] : kind === 1 ? sp.tex[((now * 0.0022 + slot * 0.71) | 0) & 3] : st === 5 || st === 6 ? sp.tex[4] : sp.tex[(packed & 15) & 3];
         const sc = size / sp.set.basePx; p.scaleX = left ? -sc : sc; p.scaleY = sc; p.rotation = data[o + 7];
-        p.tint = packed & 128 ? 0xff9a9a : packed & 256 ? 0xb4ff9a : 0xffffff;
+        p.tint = kind === 3 ? decayTint(((packed >> 9) & 15) / 15) : packed & 128 ? 0xff9a9a : packed & 256 ? 0xb4ff9a : 0xffffff;
       }
       p.x = x; p.y = y; p.alpha = 1;
       c.particleChildren[u] = p; used[layer][sp.page] = u + 1; vis++;

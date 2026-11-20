@@ -198,7 +198,7 @@ export class Sim {
       if (x < x0 || x > x1 || y < y0 || y > y1) continue;
       const o = n * FRAME_STRIDE;
       out[o] = i; out[o + 1] = e.uid[i]; out[o + 2] = x; out[o + 3] = y; out[o + 4] = e.species[i];
-      const hp = Math.max(0, Math.min(15, (e.health[i] * 15) | 0));
+      const hp = k === 3 ? Math.max(0, Math.min(15, ((e.energy[i] / Math.max(0.01, e.maxE[i])) * 15) | 0)) : Math.max(0, Math.min(15, (e.health[i] * 15) | 0));
       out[o + 5] = ((e.anim[i] | 0) & 15) | (e.facing[i] < 0 ? 16 : 0) | (k << 5) | (e.hurt[i] > 0 ? 128 : 0) | (e.flags[i] & 1 ? 256 : 0) | (hp << 9) | ((e.state[i] & 7) << 13);
       out[o + 6] = e.size[i]; out[o + 7] = Math.atan2(e.vy[i], Math.abs(e.vx[i]) + 0.001) * 0.6 * (e.facing[i] < 0 ? -1 : 1);
       n++;

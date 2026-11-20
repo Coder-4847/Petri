@@ -95,3 +95,10 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .toast.era { border-left-color: var(--accent); border-color: var(--accent-dim); padding: 10px 20px; } .toast.era .tt { color: var(--accent); font-size: 15px; letter-spacing: 1px; }
 .toast.extinct { border-left-color: var(--bad); } .toast.species { border-left-color: var(--warn); }
 .era-leader { color: var(--faint); }
+
+.panel.narrow { width: min(460px, calc(100vw - 24px)); }
+.setting { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.setting b { font-weight: 400; display: block; } .setting i { display: block; font-style: normal; font-size: 11px; color: var(--dim); margin-top: 2px; }
+.tog { width: 40px; height: 20px; background: var(--line); position: relative; flex: none; border: 1px solid var(--line2); transition: background .15s; }
+.tog::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: var(--dim); transition: transform .15s, background .15s; }
+.tog.on { background: var(--accent-dim); } .tog.on::after { transform: translateX(20px); background: var(--accent); }

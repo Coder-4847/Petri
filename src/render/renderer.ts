@@ -8,6 +8,7 @@ import { Background } from './background';
 import { Ambient } from './ambient';
 import { CreatureLayer } from './creatures';
 import { Lighting } from './lighting';
+import { Fx } from './fx';
 import { hexR, hexG, hexB } from './util';
 
 type WorldMsg = Extract<FromWorker, { t: 'world' }>;
@@ -21,6 +22,7 @@ export class Renderer {
   ambient = new Ambient();
   creatures = new CreatureLayer();
   lighting = new Lighting();
+  fx = new Fx();
   def: BiomeDef | null = null;
   medium: Uint8Array = new Uint8Array(W * H);
   time = 0;
@@ -54,6 +56,8 @@ export class Renderer {
     this.app.ticker.add((tk) => this.tick(tk.deltaMS / 1000));
   }
 
+  setGore(on: boolean) { this.fx.gore = on; this.creatures.gore = on; }
+
   setWorld(m: WorldMsg) {
     const def = BIOME_BY_ID[m.biome]; const changed = this.def?.id !== def.id;
     this.def = def; this.medium = m.medium;
@@ -61,16 +65,16 @@ export class Renderer {
       this.terrain.build(def, m.medium, m.light);
       // water meshes sit between ground and creatures (back) / above creatures (front)
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.terrain.waterBack!, this.creatures.root, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       const horizon = def.terrain.water > 0 ? def.terrain.water * H : Math.min(...Array.from(m.surfaceY).filter((v) => v < H), H * 0.5);
       this.bg.build(def, horizon);
-      this.ambient.setWorld(def, m.medium);
+      this.ambient.setWorld(def, m.medium); this.fx.setWorld(m.medium);
       this.lighting.setAmbient(def.light);
       this.creatures.reset();
     } else {
       this.terrain.build(def, m.medium, m.light); // terrain edited (power / regen): repaint
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.terrain.waterBack!, this.creatures.root, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       this.ambient.setWorld(def, m.medium);
     }
   }
@@ -86,7 +90,7 @@ export class Renderer {
     if (this.def) {
       this.bg.update(cam, this.time, this.def.fog);
       this.terrain.update(this.time);
-      this.ambient.update(dt, cam, this.time);
+      this.ambient.update(dt, cam, this.time); this.fx.update(dt, cam);
       this.creatures.render(cam, performance.now());
     }
     // tell the sim what we can see (throttled)
