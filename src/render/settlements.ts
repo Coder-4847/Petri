@@ -6,6 +6,7 @@ import { makeCanvas } from './util';
 
 type Paint = (c: CanvasRenderingContext2D) => void;
 interface Kind { id: string; w: number; h: number; minTech: number; weight: number; paint: Paint }
+const SCALE = 0.5; // world cells per building texel
 const hash = (n: number) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 const R = (c: CanvasRenderingContext2D, col: string, x: number, y: number, w: number, h: number) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
 const tri = (c: CanvasRenderingContext2D, col: string, x: number, y: number, w: number, h: number) => { c.fillStyle = col; for (let i = 0; i < h; i++) { const k = Math.round((w / 2) * (1 - i / h)); c.fillRect(x + w / 2 - k - 0.5 + 0.5, y + h - 1 - i, k * 2, 1); } };
@@ -30,7 +31,10 @@ const KINDS: Kind[] = [
 
 export class Settlements {
   container = new Container();
+  /** additive copies of the lit windows, faded in at night */
+  lights = new Container();
   private tex = new Map<string, Texture>();
+  private ltex = new Map<string, Texture>();
   private surfaceY: Int16Array = new Int16Array(W).fill(H); private waterTop: Int16Array = new Int16Array(W).fill(-1);
   private key = '';
   private civ: { pop: number; tech: number } | null = null;
@@ -46,15 +50,20 @@ export class Settlements {
     const x = cv.getContext('2d')!, img = x.getImageData(0, 0, k.w, k.h), out = x.createImageData(k.w, k.h);
     for (let i = 0; i < k.w * k.h; i++) { const a = img.data[i * 4 + 3]; if (a) { out.data.set(img.data.subarray(i * 4, i * 4 + 4), i * 4); continue; } const px = i % k.w, py = (i / k.w) | 0; let near = false; for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]]) { const nx = px + dx, ny = py + dy; if (nx >= 0 && ny >= 0 && nx < k.w && ny < k.h && img.data[(ny * k.w + nx) * 4 + 3]) near = true; } if (near) { out.data[i * 4] = 24; out.data[i * 4 + 1] = 22; out.data[i * 4 + 2] = 30; out.data[i * 4 + 3] = 255; } }
     x.putImageData(out, 0, 0);
-    t = Texture.from(cv); t.source.scaleMode = 'nearest'; this.tex.set(k.id, t); return t;
+    t = Texture.from(cv); t.source.scaleMode = 'nearest'; this.tex.set(k.id, t);
+    // light map: warm/cool window pixels only
+    const lc = makeCanvas(k.w, k.h), lx = lc.getContext('2d')!, li = lx.createImageData(k.w, k.h);
+    for (let i = 0; i < k.w * k.h; i++) { const r = out.data[i * 4], g = out.data[i * 4 + 1], b = out.data[i * 4 + 2]; const hex = (r << 16) | (g << 8) | b, warm = hex === 0xf6d27a, cool = hex === 0xa8d0e8 || hex === 0xd8ecf6 || hex === 0x78c8d0 || hex === 0x58b0b8; if (warm || cool) { li.data[i * 4] = warm ? 255 : 200; li.data[i * 4 + 1] = warm ? 210 : 235; li.data[i * 4 + 2] = warm ? 120 : 255; li.data[i * 4 + 3] = 255; } }
+    lx.putImageData(li, 0, 0); const lt = Texture.from(lc); lt.source.scaleMode = 'nearest'; this.ltex.set(k.id, lt);
+    return t;
   }
 
   private refresh() {
     const c = this.civ;
-    const count = c ? Math.min(60, Math.round(Math.sqrt(c.pop) * 1.1)) : 0, tier = c ? Math.floor(c.tech * 14) : 0;
+    const count = c ? Math.min(90, Math.round(Math.sqrt(c.pop) * 1.5)) : 0, tier = c ? Math.floor(c.tech * 14) : 0;
     const key = `${count}|${tier}|${this.ruined}|${this.surfaceY[10]}|${this.surfaceY[200]}`;
     if (key === this.key) return; this.key = key;
-    this.container.removeChildren().forEach((s) => s.destroy());
+    this.container.removeChildren().forEach((s) => s.destroy()); this.lights.removeChildren().forEach((s) => s.destroy());
     if (!c || count === 0) return;
     const taken: [number, number][] = [];
     for (let i = 0; i < count; i++) {
@@ -63,15 +72,16 @@ export class Settlements {
       let r = hash(i * 3.7) * wts.reduce((a, b) => a + b, 0), kind = elig[0]; for (let j = 0; j < elig.length; j++) { r -= wts[j]; if (r <= 0) { kind = elig[j]; break; } }
       let placed = false;
       for (let a = 0; a < 10 && !placed; a++) {
-        const x = Math.round(8 + hash(i * 7.3 + a * 13.1) * (W - 16 - kind.w)), cx = x + kind.w / 2;
-        if (this.waterTop[x] >= 0 || this.waterTop[x + kind.w - 1] >= 0) continue;
-        const y0 = this.surfaceY[x], y1 = this.surfaceY[x + kind.w - 1], ym = this.surfaceY[(x + kind.w / 2) | 0];
-        if (y0 >= H || y1 >= H || Math.abs(y0 - y1) > 3 || Math.abs(ym - y0) > 3) continue;
-        if (taken.some(([a0, a1]) => x < a1 + 2 && x + kind.w > a0 - 2)) continue;
-        taken.push([x, x + kind.w]);
-        const s = new Sprite(this.texture(kind)); s.anchor.set(0, 1); s.position.set(x, Math.max(y0, y1) + 1);
-        if (this.ruined) { s.tint = 0x585860; s.alpha = 0.85; s.height = kind.h * 0.7; s.width = kind.w; }
+        const kw = Math.ceil(kind.w * SCALE), x = Math.round(8 + hash(i * 7.3 + a * 13.1) * (W - 16 - kw)), cx = x + kw / 2;
+        if (this.waterTop[x] >= 0 || this.waterTop[x + kw - 1] >= 0) continue;
+        const y0 = this.surfaceY[x], y1 = this.surfaceY[x + kw - 1], ym = this.surfaceY[(x + kw / 2) | 0];
+        if (y0 >= H || y1 >= H || Math.abs(y0 - y1) > 2 || Math.abs(ym - y0) > 2) continue;
+        if (taken.some(([a0, a1]) => x < a1 + 1 && x + kw > a0 - 1)) continue;
+        taken.push([x, x + kw]);
+        const s = new Sprite(this.texture(kind)); s.anchor.set(0, 1); s.position.set(x, Math.max(y0, y1) + 0.6); s.scale.set(SCALE);
+        if (this.ruined) { s.tint = 0x585860; s.alpha = 0.85; s.scale.set(SCALE, SCALE * 0.7); }
         this.container.addChild(s); placed = true; void cx;
+        if (!this.ruined) { const l = new Sprite(this.ltex.get(kind.id)!); l.anchor.set(0, 1); l.position.copyFrom(s.position); l.scale.copyFrom(s.scale); l.blendMode = 'add'; this.lights.addChild(l); }
       }
     }
   }

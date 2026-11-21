@@ -16,7 +16,8 @@ export class Stats {
   private series: Record<string, number[]> = Object.fromEntries(ROLES.map((r) => [r.id, [] as number[]]));
   private species: number[] = [];
   private cv: HTMLCanvasElement; private label: HTMLElement;
-  private tab: 'pop' | 'web' = 'pop';
+  private tab: 'pop' | 'web' | 'log' = 'pop';
+  private chron: { when: string; kind: string; text: string }[] = []; private logEl!: HTMLElement;
   private web: { nodes: WebNode[]; edges: WebEdge[] } = { nodes: [], edges: [] };
   private pos = new Map<number, { x: number; y: number; r: number }>();
   private hover = -1;
@@ -25,8 +26,8 @@ export class Stats {
   private lastReq = 0;
 
   constructor() {
-    this.el.innerHTML = `<h3>Statistics <span class="sub" id="st-sub"></span></h3><div class="cx-tabs"><button class="on" data-t="pop">Populations</button><button data-t="web">Food web</button></div><canvas class="st-cv" width="680" height="220"></canvas><div class="st-legend"></div><div class="st-label"></div>`;
-    this.cv = this.el.querySelector('canvas')!; this.label = this.el.querySelector('.st-label')!;
+    this.el.innerHTML = `<h3>Statistics <span class="sub" id="st-sub"></span></h3><div class="cx-tabs"><button class="on" data-t="pop">Populations</button><button data-t="web">Food web</button><button data-t="log">Chronicle</button></div><canvas class="st-cv" width="680" height="220"></canvas><div class="chron" style="display:none"></div><div class="st-legend"></div><div class="st-label"></div>`;
+    this.cv = this.el.querySelector('canvas')!; this.label = this.el.querySelector('.st-label')!; this.logEl = this.el.querySelector('.chron')!;
     this.el.querySelectorAll<HTMLElement>('.cx-tabs button').forEach((b) => (b.onclick = () => { this.tab = b.dataset.t as any; this.el.querySelectorAll('.cx-tabs button').forEach((x) => x.classList.toggle('on', x === b)); this.draw(); if (this.tab === 'web') this.requestWeb?.(); }));
     this.cv.addEventListener('pointermove', (e) => { const r = this.cv.getBoundingClientRect(), x = (e.clientX - r.left) * (this.cv.width / r.width), y = (e.clientY - r.top) * (this.cv.height / r.height); let best = -1, bd = 1e9; for (const [id, p] of this.pos) { const d = Math.hypot(p.x - x, p.y - y); if (d < p.r + 6 && d < bd) { bd = d; best = id; } } this.hover = best; this.draw(); });
     this.el.querySelector('.st-legend')!.innerHTML = ROLES.map((r) => `<span><i style="background:${r.col}"></i>${r.label}</span>`).join('');
@@ -44,7 +45,10 @@ export class Stats {
   clear() { for (const k in this.series) this.series[k].length = 0; this.species.length = 0; this.web = { nodes: [], edges: [] }; }
   setWeb(w: { nodes: WebNode[]; edges: WebEdge[] }) { this.web = w; if (this.visible && this.tab === 'web') this.draw(); }
 
+  setChronicle(list: { when: string; kind: string; text: string }[]) { this.chron = list; if (this.visible && this.tab === 'log') this.draw(); }
   private draw() {
+    const isLog = this.tab === 'log'; this.cv.style.display = isLog ? 'none' : ''; this.logEl.style.display = isLog ? '' : 'none';
+    if (isLog) { this.label.textContent = `${this.chron.length} events this session`; (this.el.querySelector('.st-legend') as HTMLElement).style.display = 'none'; this.logEl.innerHTML = this.chron.length ? [...this.chron].reverse().map((c) => `<div><i>${c.when}</i><span>${c.text}</span></div>`).join('') : '<p class="note">Nothing has happened yet. Give it time.</p>'; return; }
     const c = this.cv, x = c.getContext('2d')!, W = c.width, H = c.height;
     x.clearRect(0, 0, W, H); x.fillStyle = '#0b0f16'; x.fillRect(0, 0, W, H);
     (this.el.querySelector('.st-legend') as HTMLElement).style.display = this.tab === 'pop' ? '' : 'none';

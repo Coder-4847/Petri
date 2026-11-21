@@ -1,9 +1,10 @@
 import { Container, Sprite, Texture, Mesh, MeshGeometry, Shader, UniformGroup, BufferImageSource } from 'pixi.js';
-import { W, H, AIR, LAVA, ICE, IS_SOLID, IS_WATER, SNOW } from '../shared/constants';
-import { DEFAULT_PAL, type BiomeDef, type MediumPal } from '../data/biomes';
-import { hexR, hexG, hexB, hash2, makeCanvas, mix } from './util';
+import { W, H, LAVA, IS_WATER } from '../shared/constants';
+import type { BiomeDef } from '../data/biomes';
+import { hexR, hexG, hexB } from './util';
+import { paintGround, PX } from './ground';
 
-export const PX = 4; // texels per world cell in the terrain texture
+export { PX };
 
 const VERT = `
 in vec2 aPosition; in vec2 aUV; out vec2 vUV;
@@ -15,7 +16,7 @@ void main(){ mat3 mvp = uProjectionMatrix * uWorldTransformMatrix * uTransformMa
 const FRAG = `
 in vec2 vUV; out vec4 finalColor;
 uniform sampler2D uTexture;
-uniform float uTime; uniform float uMode; uniform vec3 uShallow; uniform vec3 uDeep; uniform vec2 uWorld; uniform float uDim;
+uniform float uTime; uniform float uMode; uniform vec3 uShallow; uniform vec3 uDeep; uniform vec2 uWorld; uniform float uDim; uniform vec3 uTint;
 float caustic(vec2 uv, float time){
   vec2 p = mod(uv*6.28318530718, 6.28318530718) - 250.0; vec2 i = p; float c = 1.0; float inten = .005;
   for (int n = 0; n < 4; n++) { float t = time * (1.0 - (3.5 / float(n+1)));
@@ -29,21 +30,26 @@ void main(){
   vec2 q = floor(cell * 4.0) / 4.0;
   if (d.r > 0.9) {
     float depth = d.g * 255.0; float light = d.b;
-    vec3 col = mix(uDeep, uShallow, pow(light, 0.8));
+    vec3 col = mix(uDeep, uShallow, pow(light, 0.85));
     float cs = caustic(q * 0.045, uTime * 0.5) * light * light;
+    // god rays: slanted, slowly swaying shafts that fade with depth
+    float ray = pow(max(0.0, sin((q.x + q.y * 0.42) * 0.11 + sin(uTime * 0.13 + q.x * 0.01) * 2.2)), 10.0) + 0.6 * pow(max(0.0, sin((q.x + q.y * 0.38) * 0.053 - uTime * 0.07)), 14.0);
+    ray *= light * exp(-depth * 0.018);
     vec4 up = texture(uTexture, vUV - vec2(0.0, 1.0 / uWorld.y));
-    float surf = 0.0;
-    if (up.r < 0.9) { float wave = 0.3 + 0.16 * sin(cell.x * 0.7 + uTime * 1.6) + 0.08 * sin(cell.x * 1.9 - uTime * 2.3); surf = step(fract(cell.y), wave); }
+    float surf = 0.0, foam = 0.0;
+    if (up.r < 0.9) { float wave = 0.3 + 0.16 * sin(cell.x * 0.7 + uTime * 1.6) + 0.08 * sin(cell.x * 1.9 - uTime * 2.3); surf = step(fract(cell.y), wave); foam = step(0.82, fract(sin(floor(q.x * 2.0) * 12.9898 + floor(uTime * 3.0)) * 43758.5453)) * surf; }
+    float sub = (up.r > 0.9 && texture(uTexture, vUV - vec2(0.0, 2.0 / uWorld.y)).r < 0.9) ? 1.0 : 0.0;
     if (uMode < 0.5) {
-      col += vec3(0.55, 0.9, 1.0) * cs * 0.55;
-      col = mix(col, vec3(0.88, 0.98, 1.0), surf * 0.75);
-      col *= uDim;
+      col += vec3(0.55, 0.9, 1.0) * cs * 0.55 + vec3(0.6, 0.9, 1.0) * ray * 0.16;
+      col = mix(col, uShallow * 1.25, sub * 0.35);
+      col = mix(col, vec3(0.88, 0.98, 1.0), surf * 0.75); col = mix(col, vec3(1.0), foam * 0.6);
+      col *= uDim * uTint;
       float a = 0.93; finalColor = vec4(col * a, a);
     } else {
-      // translucent overlay in front of creatures: depth haze + a little caustic shimmer
       float haze = 1.0 - exp(-depth * 0.012);
-      col = col + vec3(0.5, 0.85, 1.0) * cs * 0.5;
-      float a = (0.08 + 0.22 * haze) + surf * 0.35; finalColor = vec4(mix(col, vec3(0.9,1.0,1.0), surf) * a, a);
+      col = col + vec3(0.5, 0.85, 1.0) * cs * 0.5 + vec3(0.7, 0.95, 1.0) * ray * 0.5;
+      col *= uTint;
+      float a = (0.07 + 0.24 * haze) + surf * 0.35 + ray * 0.1; finalColor = vec4(mix(col, vec3(0.9,1.0,1.0) * uTint, surf) * a, a);
     }
   } else if (d.r > 0.4) {
     if (uMode > 0.5) { finalColor = vec4(0.0); return; }
@@ -51,6 +57,7 @@ void main(){
     vec3 col = mix(vec3(0.75, 0.16, 0.04), vec3(1.0, 0.72, 0.2), smoothstep(-1.0, 2.2, n));
     float crust = step(1.7, n * 0.5 + sin(q.x * 5.0) * 0.4); col = mix(col, vec3(0.25, 0.07, 0.03), crust * 0.7);
     vec4 up = texture(uTexture, vUV - vec2(0.0, 1.0 / uWorld.y)); if (up.r < 0.4) col = mix(col, vec3(1.0, 0.9, 0.5), 0.5);
+    col *= mix(uTint, vec3(1.0), 0.75);
     finalColor = vec4(col, 1.0);
   } else { finalColor = vec4(0.0); }
 }`;
@@ -82,7 +89,7 @@ export class TerrainLayer {
       const uni = new UniformGroup({
         uTime: { value: 0, type: 'f32' }, uMode: { value: mode, type: 'f32' },
         uShallow: { value: [0, 0, 0], type: 'vec3<f32>' }, uDeep: { value: [0, 0, 0], type: 'vec3<f32>' },
-        uWorld: { value: [W, H], type: 'vec2<f32>' }, uDim: { value: 1, type: 'f32' },
+        uWorld: { value: [W, H], type: 'vec2<f32>' }, uDim: { value: 1, type: 'f32' }, uTint: { value: [1, 1, 1], type: 'vec3<f32>' },
       });
       const shader = Shader.from({ gl: { vertex: VERT, fragment: FRAG }, resources: { uTexture: this.dataSource!, uSampler: this.dataSource!.style, waterUniforms: uni } });
       return { uni, mesh: new Mesh({ geometry: this.geom!, shader }) };
@@ -92,8 +99,13 @@ export class TerrainLayer {
     this.ready = true;
   }
 
+  private paintedKey = '';
   build(def: BiomeDef, medium: Uint8Array, light: Uint8Array) {
-    // ground is repainted; the water meshes and their data texture live for the whole session
+    // ground is repainted only when the grid changed; the water meshes and their data texture live for the whole session
+    let h = 2166136261; for (let i = 0; i < medium.length; i++) h = Math.imul(h ^ medium[i], 16777619);
+    const key = def.id + ':' + h;
+    if (key === this.paintedKey && this.ready) { this.refreshLight(medium, light); return; }
+    this.paintedKey = key;
     this.ground.removeChildren();
     this.groundSprite?.destroy(); this.groundTex?.destroy(true);
     const canvas = paintGround(def, medium);
@@ -124,98 +136,12 @@ export class TerrainLayer {
   /** Refresh water light/depth after the environment changes (cheap, no repaint of ground). */
   refreshLight(medium: Uint8Array, light: Uint8Array) { this.writeData(medium, light); this.dataSource?.update(); }
 
+  tint = 0xffffff;
   update(time: number, dim = 1) {
-    if (this.uniBack) { this.uniBack.uniforms.uTime = time; this.uniBack.uniforms.uDim = dim; }
-    if (this.uniFront) this.uniFront.uniforms.uTime = time;
+    const t = [hexR(this.tint) / 255, hexG(this.tint) / 255, hexB(this.tint) / 255];
+    if (this.uniBack) { this.uniBack.uniforms.uTime = time; this.uniBack.uniforms.uDim = dim; this.uniBack.uniforms.uTint = t; }
+    if (this.uniFront) { this.uniFront.uniforms.uTime = time; this.uniFront.uniforms.uTint = t; }
   }
 
 }
 
-/** Paint every solid cell (and cave back-walls) at PX texels per cell with pixel-art shading. */
-function paintGround(def: BiomeDef, medium: Uint8Array): HTMLCanvasElement {
-  const cw = W * PX, ch = H * PX;
-  const canvas = makeCanvas(cw, ch);
-  const ctx = canvas.getContext('2d')!;
-  const img = ctx.createImageData(cw, ch);
-  const buf = new Uint32Array(img.data.buffer);
-  const pal = (m: number): MediumPal => def.pal[m] ?? DEFAULT_PAL[m] ?? DEFAULT_PAL[5];
-  const pk = (c: number) => (255 << 24) | (hexB(c) << 16) | (hexG(c) << 8) | hexR(c);
-
-  // depth below the exposed top surface, per cell, and cave detection: air is a cave only when ground is
-  // above it AND below it (so the sky under a floating island stays sky)
-  const dtop = new Uint8Array(W * H), cave = new Uint8Array(W * H);
-  for (let x = 0; x < W; x++) {
-    let d = 0, roofed = false, nextSolid = 1e9;
-    const below = new Int16Array(H); // distance to the next solid cell below
-    for (let y = H - 1; y >= 0; y--) { if (IS_SOLID[medium[y * W + x]]) nextSolid = y; below[y] = nextSolid === 1e9 ? 9999 : nextSolid - y; }
-    for (let y = 0; y < H; y++) {
-      const i = y * W + x, s = IS_SOLID[medium[i]];
-      if (s) { d = Math.min(255, d + 1); roofed = true; dtop[i] = d; }
-      else { d = 0; if (roofed && !def.noFloor && medium[i] !== LAVA && below[y] < 45) cave[i] = 1; }
-    }
-  }
-  // palettes darken with depth (16 dithered buckets) so the underground reads as deep
-  const cache = new Map<number, [number, number, number, number, number]>();
-  const colors = (m: number, depthY: number, jitter: number) => {
-    const bucket = Math.min(15, Math.max(0, (((depthY / H) * 17 - 3) + jitter) | 0)), key = m * 32 + bucket;
-    let c = cache.get(key);
-    if (!c) { const p = pal(m), k = bucket * 0.04, dk = (v: number) => mix(v, 0x06080d, k);
-      c = [pk(dk(p.hi)), pk(dk(p.base)), pk(dk(p.lo)), p.cap ? pk(p.cap) : 0, p.cap ? pk(mix(p.cap, 0xffffff, 0.28)) : 0]; cache.set(key, c); }
-    return c;
-  };
-  const rockLo = pal(5).lo;
-  const caveCol = [pk(mix(rockLo, 0x000000, 0.55)), pk(mix(rockLo, 0x000000, 0.7)), pk(mix(rockLo, 0x000000, 0.4))];
-
-  for (let cy = 0; cy < H; cy++) {
-    for (let cx = 0; cx < W; cx++) {
-      const i = cy * W + cx, m = medium[i];
-      const solid = IS_SOLID[m];
-      if (!solid && !cave[i]) continue;
-      const aboveSolid = cy > 0 && IS_SOLID[medium[i - W]];
-      const belowSolid = cy < H - 1 ? IS_SOLID[medium[i + W]] : 1;
-      const leftSolid = cx > 0 ? IS_SOLID[medium[i - 1]] : 1;
-      const rightSolid = cx < W - 1 ? IS_SOLID[medium[i + 1]] : 1;
-      const dd = dtop[i];
-      const [chi, cbase, clo, ccap, ccapHi] = solid ? colors(m, cy, hash2(cx, cy, 21)) : [0, 0, 0, 0, 0];
-      const isIce = m === ICE, isSnow = m === SNOW;
-      for (let ty = 0; ty < PX; ty++) {
-        for (let tx = 0; tx < PX; tx++) {
-          const X = cx * PX + tx, Y = cy * PX + ty;
-          const r = hash2(X, Y, 1);
-          let c: number;
-          if (!solid) { // cave back-wall
-            c = caveCol[r > 0.8 ? 2 : r > 0.4 ? 0 : 1];
-            if (!aboveSolid && ty === 0) c = caveCol[2];
-          } else {
-            const blob = hash2(X >> 2, Y >> 1, 7) * 0.55 + hash2(X >> 1, Y >> 1, 8) * 0.3 + r * 0.15;
-            c = blob > 0.72 ? chi : blob < 0.3 ? clo : cbase;
-            if (isIce && r > 0.93) c = pk(0xffffff);
-            else if (dd > 6 && !isSnow && ((cy + ((cx * 0.07) | 0)) % 9 === 0) && ty === 1) c = clo; // faint strata
-            // deeper ground gets darker
-            if (dd > 2 && !isSnow) { const t = Math.min(0.5, (dd - 2) * 0.018); if (hash2(X >> 1, Y >> 1, 3) < t * 2) c = clo; }
-            // grassy/snowy cap with a ragged lower edge
-            if (ccap && !aboveSolid) {
-              const rag = 2 + (hash2(X, 0, 5) > 0.55 ? 1 : 0) + (hash2(X >> 1, 1, 6) > 0.7 ? 1 : 0);
-              if (ty < rag) c = ty === 0 || r > 0.78 ? ccapHi : ccap;
-              else if (ty === rag && r > 0.45) c = ccap;
-            } else if (ccap && dd === 2 && ty < 1 && r > 0.5) c = ccap; // roots show under thin caps
-            // lit left edges / shadowed right & under edges
-            if (!leftSolid && tx === 0) c = chi;
-            if (!rightSolid && tx === PX - 1) c = clo;
-            if (!belowSolid && ty === PX - 1) c = clo;
-          }
-          buf[Y * cw + X] = c;
-        }
-      }
-      // grass fringe above the surface
-      if (solid && ccap && !aboveSolid && cy > 0) {
-        for (let tx = 0; tx < PX; tx++) {
-          const X = cx * PX + tx, r = hash2(X, cy, 9);
-          if (r > 0.5) { const hgt = r > 0.9 ? 2 : 1; for (let k = 1; k <= hgt; k++) { const Y = cy * PX - k; if (Y >= 0 && !buf[Y * cw + X]) buf[Y * cw + X] = r > 0.8 ? ccapHi : ccap; } }
-        }
-      }
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  return canvas;
-}

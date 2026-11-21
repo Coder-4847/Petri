@@ -41,11 +41,14 @@ export class CivPanel {
 export class ChoiceModal {
   el = document.createElement('div');
   onAnswer: ((i: number) => void) | null = null;
-  constructor() { this.el.className = 'choice'; document.body.appendChild(this.el); }
+  constructor() { this.el.className = 'choice'; document.body.appendChild(this.el); this.constructor2(); }
   show(m: { title: string; text: string; year: number; options: { label: string; hint: string }[] }) {
-    this.el.innerHTML = `<div class="ch-card"><div class="ch-year">${fmtYear(m.year)}</div><h2>${m.title}</h2><p>${m.text}</p><div class="ch-opts">${m.options.map((o, i) => `<button data-i="${i}"><b>${o.label}</b><i>${o.hint}</i></button>`).join('')}</div></div>`;
+    this.el.innerHTML = `<div class="ch-card"><div class="ch-year">A GREAT DECISION · ${fmtYear(m.year)}</div><h2>${m.title}</h2><p>${m.text}</p><div class="ch-opts">${m.options.map((o, i) => `<button data-i="${i}"><kbd>${i + 1}</kbd><b>${o.label}</b><i>${o.hint}</i></button>`).join('')}</div></div>`;
     this.el.querySelectorAll<HTMLElement>('.ch-opts button').forEach((b) => (b.onclick = () => { this.hide(); this.onAnswer?.(+b.dataset.i!); }));
     this.el.classList.add('open');
+    this.n = m.options.length;
   }
+  private n = 0;
+  constructor2() { window.addEventListener('keydown', (e) => { if (!this.el.classList.contains('open')) return; const k = +e.key; if (k >= 1 && k <= this.n) { e.preventDefault(); this.hide(); this.onAnswer?.(k - 1); } }); }
   hide() { this.el.classList.remove('open'); }
 }

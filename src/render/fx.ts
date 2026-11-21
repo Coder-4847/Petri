@@ -11,7 +11,7 @@ const MAX = 1400;
 export class Fx {
   container: ParticleContainer;
   stains: Sprite;
-  private stainCanvas = makeCanvas(W * 2, H * 2);
+  private stainCanvas = makeCanvas(W * 4, H * 4);
   private stainTex: Texture;
   private parts: Particle[] = [];
   private kind = new Uint8Array(MAX); private x = new Float32Array(MAX); private y = new Float32Array(MAX); private vx = new Float32Array(MAX); private vy = new Float32Array(MAX);
@@ -31,7 +31,7 @@ export class Fx {
     this.container.boundsArea = new Rectangle(-20, -20, W + 40, H + 40);
     for (let i = 0; i < MAX; i++) this.parts.push(new Particle({ texture: this.tex.px, anchorX: 0.5, anchorY: 0.5 }));
     this.stainTex = Texture.from(this.stainCanvas); this.stainTex.source.scaleMode = 'nearest';
-    this.stains = new Sprite(this.stainTex); this.stains.scale.set(0.5);
+    this.stains = new Sprite(this.stainTex); this.stains.scale.set(0.25);
   }
 
   setWorld(medium: Uint8Array) {
@@ -79,9 +79,14 @@ export class Fx {
   }
 
   private stain(x: number, y: number, big: boolean) {
-    const c = this.stainCanvas.getContext('2d')!; c.fillStyle = big ? 'rgba(120,16,28,0.75)' : 'rgba(150,24,34,0.6)';
-    c.fillRect(Math.round(x * 2), Math.round(y * 2) - 1, big ? 3 : 2, 1); this.stainTex.source.update();
+    // a small irregular splat at terrain resolution, darker in the middle
+    const c = this.stainCanvas.getContext('2d')!, X = Math.round(x * 4), Y = Math.round(y * 4) - 1, n = big ? 5 : 3;
+    c.fillStyle = 'rgba(122,14,26,0.55)'; for (let k = 0; k < n; k++) c.fillRect(X + Math.round((Math.random() - 0.5) * n * 1.6), Y + Math.round(Math.random() * 1.5), 1 + (Math.random() * 2 | 0), 1);
+    c.fillStyle = 'rgba(90,8,18,0.7)'; c.fillRect(X, Y, big ? 2 : 1, 1);
+    this.stainDirty = true;
   }
+  private stainDirty = false;
+
 
   update(dt: number, cam: Camera) {
     const zoom = cam.zoom, pxW = 1 / zoom;
@@ -111,6 +116,7 @@ export class Fx {
       arr[k++] = p;
     }
     arr.length = k; this.container.update();
+    if (this.stainDirty) { this.stainDirty = false; this.stainTex.source.update(); }
     // stains fade slowly
     this.stainFade += dt; if (this.stainFade > 6) { this.stainFade = 0; const c = this.stainCanvas.getContext('2d')!; c.globalCompositeOperation = 'destination-out'; c.fillStyle = 'rgba(0,0,0,0.06)'; c.fillRect(0, 0, this.stainCanvas.width, this.stainCanvas.height); c.globalCompositeOperation = 'source-over'; this.stainTex.source.update(); }
   }

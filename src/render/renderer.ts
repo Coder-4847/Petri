@@ -10,6 +10,7 @@ import { CreatureLayer } from './creatures';
 import { Lighting } from './lighting';
 import { Settlements } from './settlements';
 import { GlowLayer } from './glow';
+import { DayNight } from './daynight';
 import { Fx } from './fx';
 import { hexR, hexG, hexB } from './util';
 
@@ -27,6 +28,9 @@ export class Renderer {
   fx = new Fx();
   settlements = new Settlements();
   glow = new GlowLayer();
+  daynight = new DayNight();
+  private glowC = new Container();
+  private horizonY = H * 0.5;
   def: BiomeDef | null = null;
   medium: Uint8Array = new Uint8Array(W * H);
   time = 0;
@@ -37,6 +41,7 @@ export class Renderer {
   private lastView = '';
   private viewT = 0;
   fps = 0;
+  night = 0;
   follow: { slot: number; uid: number } | null = null;
   onFollowEnd: (() => void) | null = null;
   /** world-space radius of the power reticle is drawn by the UI; the renderer only converts coordinates */
@@ -55,7 +60,8 @@ export class Renderer {
     const st = this.app.stage;
     this.skyC.addChild(this.bg.sky);
     this.worldC.addChild(this.terrain.ground, this.creatures.root);
-    st.addChild(this.skyC, this.bg.layers, this.worldC, this.lighting.sprite);
+    this.glowC.addChild(this.settlements.lights, this.glow.container);
+    st.addChild(this.skyC, this.daynight.container, this.bg.layers, this.worldC, this.glowC, this.lighting.sprite);
     this.worldC.addChild(this.ambient.container);
     this.cam.setScreen(this.app.screen.width, this.app.screen.height);
     this.lighting.resize(this.app.screen.width, this.app.screen.height);
@@ -64,6 +70,17 @@ export class Renderer {
     this.app.ticker.add((tk) => this.tick(tk.deltaMS / 1000));
   }
 
+  /** Point the camera at the most interesting band: the land surface, or the sea floor. */
+  frame(m: { surfaceY: Int16Array; waterTop: Int16Array }) {
+    const ys: number[] = []; let wet = 0;
+    for (let x = 0; x < W; x++) { if (m.surfaceY[x] < H) ys.push(m.surfaceY[x]); if (m.waterTop[x] >= 0) wet++; }
+    if (!ys.length) { this.cam.focus(W / 2, H / 2, 5); return; }
+    ys.sort((a, b) => a - b); const med = ys[ys.length >> 1];
+    const sea = wet > W * 0.8 && this.def?.group === 'sea';
+    const zoom = Math.max(this.cam.minZoom, sea ? 5.5 : 7);
+    const y = sea ? med - this.cam.sh / zoom * 0.3 : med - this.cam.sh / zoom * 0.12;
+    this.cam.focus(W / 2, y, zoom); this.cam.x = this.cam.tx; this.cam.y = this.cam.ty; this.cam.zoom = zoom;
+  }
   setQuality(q: number) { this.quality = q; this.ambient.density = q === 0 ? 0.35 : q === 1 ? 0.7 : 1; this.glow.enabled = q > 0; this.app.renderer.resolution = q === 0 ? 1 : Math.min(window.devicePixelRatio || 1, 2); if (this.def) this.ambient.setWorld(this.def, this.medium); }
   setGore(on: boolean) { this.fx.gore = on; this.creatures.gore = on; }
 
@@ -75,16 +92,17 @@ export class Renderer {
       this.terrain.build(def, m.medium, m.light);
       // water meshes sit between ground and creatures (back) / above creatures (front)
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.glow.container, this.fx.container, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       const horizon = def.terrain.water > 0 ? def.terrain.water * H : Math.min(...Array.from(m.surfaceY).filter((v) => v < H), H * 0.5);
-      this.bg.build(def, horizon);
+      this.bg.build(def, horizon); this.horizonY = horizon; this.daynight.setWorld(def);
       this.ambient.setVents(m.vents); this.ambient.setWorld(def, m.medium); this.glow.setWorld(m.medium, m.vents); this.fx.setWorld(m.medium);
       this.lighting.setAmbient(def.light);
       this.creatures.reset();
+      this.frame(m);
     } else {
       this.terrain.build(def, m.medium, m.light); // terrain edited (power / regen): repaint
       this.worldC.removeChildren();
-      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.glow.container, this.fx.container, this.terrain.waterFront!, this.ambient.container);
+      this.worldC.addChild(this.terrain.ground, this.fx.stains, this.settlements.container, this.terrain.waterBack!, this.creatures.root, this.fx.container, this.terrain.waterFront!, this.ambient.container);
       this.ambient.setWorld(def, m.medium);
     }
   }
@@ -97,7 +115,9 @@ export class Renderer {
     if (this.follow) { const p = this.creatures.find(this.follow.slot, this.follow.uid); if (p) cam.focus(p.x, p.y); }
     cam.update(dt);
     const ox = cam.ox, oy = cam.oy, z = cam.zoom;
-    for (const c of [this.skyC, this.worldC]) { c.position.set(ox, oy); c.scale.set(z); }
+    for (const c of [this.skyC, this.worldC, this.glowC]) { c.position.set(ox, oy); c.scale.set(z); }
+    const g = this.daynight.update(dt, cam, this.horizonY);
+    this.bg.sky.tint = g.sky; this.bg.layers.tint = g.layers; this.worldC.tint = g.world; this.glowC.alpha = Math.min(1, g.glow); this.terrain.tint = g.world; this.night = g.night; this.settlements.lights.alpha = Math.min(1, Math.max(0, g.night * 1.4 - 0.1));
     if (this.def) {
       this.bg.update(cam, this.time, this.def.fog);
       this.terrain.update(this.time);

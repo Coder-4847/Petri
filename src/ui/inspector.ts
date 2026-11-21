@@ -11,7 +11,7 @@ export class Inspector {
 
   constructor(private sprite: (species: number) => HTMLCanvasElement | null) {
     this.el.className = 'inspector';
-    this.el.innerHTML = `<div class="in-top"><div class="in-sprite"></div><div class="in-id"></div><button class="in-x" title="Close">✕</button></div><div class="in-body"></div><div class="in-foot"><button class="in-follow">Follow</button></div>`;
+    this.el.innerHTML = `<div class="in-top"><div class="in-sprite"></div><div class="in-id"></div><button class="in-x" title="Close">✕</button></div><div class="in-body"></div><div class="in-foot"><button class="in-follow pbtn small">Follow</button></div>`;
     this.spriteBox = this.el.querySelector('.in-sprite')!; this.body = this.el.querySelector('.in-body')!;
     (this.el.querySelector('.in-x') as HTMLElement).onclick = () => this.close();
     const f = this.el.querySelector('.in-follow') as HTMLElement; f.onclick = () => this.setFollow(!this.following);

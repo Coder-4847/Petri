@@ -102,9 +102,10 @@ export class CreatureLayer {
       } else {
         const st = (packed >> 13) & 7;
         p.texture = kind === 3 ? sp.tex[st === 1 ? 6 : gore ? 5 : 7] : kind === 1 ? sp.tex[((now * 0.0022 + slot * 0.71) | 0) & 3] : st === 5 || st === 6 ? sp.tex[4] : sp.tex[(packed & 15) & 3];
-        const sc = size / sp.set.basePx; p.scaleX = left ? -sc : sc; p.scaleY = sc; p.rotation = data[o + 7];
+        const sc = size / sp.set.basePx; p.scaleX = left ? -sc : sc; p.scaleY = sc; p.rotation = sp.set.foot ? Math.max(-0.22, Math.min(0.22, data[o + 7])) : data[o + 7];
         p.tint = kind === 3 ? decayTint(((packed >> 9) & 15) / 15) : packed & 128 ? 0xff9a9a : packed & 256 ? 0xb4ff9a : 0xffffff;
       }
+      if (sp.set.foot && kind === 2) y += Math.min(size * 0.22, 1.6) - sp.set.foot * size;
       p.x = x; p.y = y; p.alpha = 1;
       if (sp.set.glow && screenPx >= 3.2 && this.glow && kind !== 3) this.glow.add(x, y, size * 2.6 + 2, sp.set.glowCol, 0.4 + 0.15 * Math.sin(now * 0.004 + slot));
       c.particleChildren[u] = p; used[layer][sp.page] = u + 1; vis++;

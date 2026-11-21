@@ -38,7 +38,7 @@ async function boot() {
   let slot = 0; // 0 = playing without a save slot
   let slotName = 'Untitled';
   let playSec = 0;
-  let inGame = false; let sessionSec = 0;
+  let inGame = false; let sessionSec = 0; let demo = false;
   let slots: (SaveMeta | null)[] = [];
   const refreshSlots = async () => { slots = await listSlots(); worldList.render(slots, slot); if (title.el.classList.contains('open')) title.list.render(slots, slot); };
 
@@ -46,11 +46,11 @@ async function boot() {
     onSpeed: (v) => send({ t: 'speed', v }),
     onBiome: (id) => send({ t: 'biome', id }),
     onEnv: (key, value) => send({ t: 'env', key, value }),
-    onSettings: () => { renderer.setGore(settings.gore); send({ t: 'cfg', config: { encounters: settings.encounters } }); applyAudio(); renderer.setQuality(settings.quality); },
+    onSettings: () => { renderer.setGore(settings.gore); send({ t: 'cfg', config: { encounters: settings.encounters } }); applyAudio(); renderer.setQuality(settings.quality); renderer.daynight.enabled = settings.daycycle; },
   });
 
   function applyAudio() { audio.volume = settings.volume; audio.music = settings.music; audio.sfx = settings.sfx; if (audio.ctx) { audio.setVolume(settings.volume); audio.setMusic(settings.music); audio.setSfx(settings.sfx); } }
-  applyAudio(); renderer.setQuality(settings.quality);
+  applyAudio(); renderer.setQuality(settings.quality); renderer.daynight.enabled = settings.daycycle;
   const wake = () => { audio.start(); applyAudio(); audio.setBiome(lastEnvBiome || 'reef'); };
   window.addEventListener('pointerdown', wake, { once: true }); window.addEventListener('keydown', wake, { once: true });
   document.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest?.('button')) audio.ui(); });
@@ -83,24 +83,25 @@ async function boot() {
 
   // ---- codex
   const codex = new Codex((tpl, n) => { tool.set({ kind: 'spawn', tpl, name: TEMPLATE_BY_ID[tpl].name, n }); shell.closePanels(); });
-  shell.addPanel('codex', 'book', 'Codex', codex.el, (open) => { if (open) { codex.open(); codex.clearFresh(); } });
+  shell.addPanel('codex', 'book', 'Codex', codex.el, (open) => { if (open) { codex.open(); codex.clearFresh(); } }, '<b>Codex</b> — every creature you have discovered; place them in the world');
 
   // ---- powers
   const pw = document.createElement('div');
   pw.innerHTML = `<h3>Powers <span class="sub">Act on the world. Time must be running at 1x–20x.</span></h3><div class="powers"></div>`;
   for (const p of POWERS) {
-    const b = document.createElement('button'); b.className = 'power'; b.innerHTML = `${icon(p.icon, 22)}<span><b>${p.name}</b><i>${p.blurb}</i></span>`;
+    const b = document.createElement('button'); b.className = 'power'; b.innerHTML = `<span class="pico">${icon(p.icon, 20)}</span><span><b>${p.name}</b><i>${p.blurb}</i></span>`;
     b.onclick = () => { tool.set({ kind: 'power', id: p.id, name: p.name, radius: p.radius, ico: p.icon }); shell.closePanels(); };
     pw.querySelector('.powers')!.appendChild(b);
   }
-  shell.addPanel('powers', 'bolt', 'Powers', pw);
+  shell.addPanel('powers', 'bolt', 'Powers', pw, undefined, '<b>Powers</b> — meteors, plagues, blessings and mutagens');
 
   // ---- stats & food web
   const statsUi = new Stats(); statsUi.requestWeb = () => send({ t: 'web' });
-  shell.addPanel('stats', 'chart', 'Stats', statsUi.el, (open) => statsUi.setVisible(open));
+  shell.addPanel('stats', 'chart', 'Stats', statsUi.el, (open) => statsUi.setVisible(open), '<b>Statistics</b> — populations, food web and chronicle');
+  shell.onChronicle = () => statsUi.setChronicle(shell.chronicle);
 
   // ---- civilization
-  const civPanel = new CivPanel(); shell.addPanel('civ', 'city', 'Society', civPanel.el);
+  const civPanel = new CivPanel(); shell.addPanel('civ', 'city', 'Society', civPanel.el, undefined, '<b>Society</b> — the civilization, its dangers and its history');
   const choiceModal = new ChoiceModal(); choiceModal.onAnswer = (i) => send({ t: 'answer', index: i });
   const endings = new EndingScreen();
   endings.onContinue = () => { send({ t: 'speed', v: 1 }); shell.setSpeed(1, false); };
@@ -118,13 +119,14 @@ async function boot() {
     },
     remove: async (s) => { await deleteSlot(s); if (slot === s) slot = 0; await refreshSlots(); },
     playWithoutSaving: () => newGame(0, 'Untitled', 'random'),
+    settings: () => shell.togglePanel('settings'),
   };
   const worldList = new SlotList(hooks, 'panel');
   const wp = document.createElement('div'); wp.classList.add('worlds');
   wp.innerHTML = `<h3>Worlds <span class="sub" id="wd-sub"></span></h3><p class="note">Five save slots live in this browser. Export a slot to keep it as a file or move it to another device.</p>`;
   wp.appendChild(worldList.el);
-  const toTitle = document.createElement('button'); toTitle.className = 'btn ghost'; toTitle.textContent = 'Back to title screen'; toTitle.style.marginTop = '10px';
-  toTitle.onclick = async () => { if (slot && inGame) requestSave(slot, true); send({ t: 'speed', v: 0 }); shell.closePanels(); await refreshSlots(); title.show(slots, slot); };
+  const toTitle = document.createElement('button'); toTitle.className = 'pbtn'; toTitle.textContent = 'Back to title screen'; toTitle.style.marginTop = '10px';
+  toTitle.onclick = async () => { if (slot && inGame) requestSave(slot, true); send({ t: 'speed', v: 1 }); shell.setSpeed(1, false); shell.closePanels(); await refreshSlots(); title.show(slots, slot); };
   wp.appendChild(toTitle);
   shell.addPanel('worlds', 'save', 'Worlds', wp, (open) => { if (open) { refreshSlots(); wp.querySelector('#wd-sub')!.textContent = slot ? `Playing “${slotName}” in slot ${slot}` : 'Not saving — pick a slot to keep this world'; } });
 
@@ -158,7 +160,7 @@ async function boot() {
   // ---- starting / loading
   function resetViews() { choiceModal.hide(); endings.hide(); renderer.creatures.reset(); renderer.follow = null; inspector.close(); statsUi.clear(); tool.set({ kind: 'inspect' }); }
   function newGame(s: number, name: string, biome: string) {
-    slot = s; slotName = name; playSec = 0; inGame = true; resetViews();
+    slot = s; slotName = name; playSec = 0; inGame = true; demo = false; resetViews(); shell.setWorldName(name);
     const b = biome === 'random' ? BIOMES[(Math.random() * BIOMES.length) | 0].id : biome;
     send({ t: 'cfg', config: { encounters: settings.encounters } });
     send({ t: 'init', seed: (Math.random() * 1e9) | 0, biome: b }); send({ t: 'speed', v: 1 }); shell.setSpeed(1, false);
@@ -167,7 +169,7 @@ async function boot() {
   }
   async function loadSlot(s: number) {
     const data = await getSlot(s), meta = slots[s - 1]; if (!data || !meta) { shell.toast('warn', 'That slot is empty'); return; }
-    slot = s; slotName = meta.name; playSec = meta.playtime; inGame = true; resetViews();
+    slot = s; slotName = meta.name; playSec = meta.playtime; inGame = true; demo = false; resetViews(); shell.setWorldName(meta.name);
     send({ t: 'cfg', config: { encounters: settings.encounters } });
     send({ t: 'load', data }); send({ t: 'speed', v: 1 }); shell.setSpeed(1, false); title.hide();
   }
@@ -177,7 +179,7 @@ async function boot() {
   const roleOf = (g: number[]) => (g[18] >= Math.max(g[21], g[22], g[23], g[20], g[24]) && g[18] > 0.35) || g[19] > 0.4 ? 'producer' : g[22] > 0.4 ? 'predator' : g[21] > 0.4 && g[22] > 0.25 ? 'omnivore' : g[21] > 0.4 ? 'grazer' : g[23] > 0.4 ? 'decomposer' : g[20] > 0.4 ? 'filter feeder' : 'consumer';
   function onStats(s: any) {
     stats = s;
-    shell.setEra(s.era.reached, s.era.progress, s.civ ? fmtYear(s.civ.year) : `${s.era.clock >= 10 ? Math.round(s.era.clock).toLocaleString() : s.era.clock.toFixed(2)} Ma`);
+    shell.setEra(s.era.reached, s.era.progress, s.civ ? fmtYear(s.civ.year) : `${s.era.clock >= 10 ? Math.round(s.era.clock).toLocaleString() : s.era.clock.toFixed(2)} million years ago`, s.era.reached < 11 ? s.era.leader : undefined);
     civPanel.update(s.civ); audio.setEra(s.era.reached);
     renderer.settlements.set(s.civ ? { pop: s.civ.pop, tech: s.civ.tech } : null, !!(s.civ?.finished && s.civ.ending && ENDINGS[s.civ.ending]?.wipeCiv));
     if (s.biome !== lastEnvBiome) { lastEnvBiome = s.biome; shell.setBiome(s.biome); shell.setEnv(s.env); }
@@ -194,19 +196,19 @@ async function boot() {
       case 'frame': renderer.creatures.onFrame(m.data, m.n, m.tick, performance.now()); if (m.events?.length) { const v = renderer.cam.view(); renderer.fx.onEvents(m.events, v); for (const ev of m.events) { if (ev.t === 'boom') audio.boom(); else if (ev.t === 'bolt') audio.bolt(); else if (ev.t === 'glow') audio.shimmer(); else audio.worldEvent(ev, v); } } break;
       case 'species': renderer.creatures.setSpecies(m.list); break;
       case 'stats': onStats(m.stats); break;
-      case 'toast': shell.toast(m.kind, m.text, m.sub); audio.toast(m.kind); break;
+      case 'toast': if (title.isOpen || demo) break; shell.toast(m.kind, m.text, m.sub); audio.toast(m.kind); break;
       case 'spawned': shell.toast(m.ok ? 'ok' : 'warn', m.msg); if (m.ok) audio.pop(); break;
       case 'powered': if (!m.ok) shell.toast('warn', m.msg); break;
-      case 'codex': codex.setUnlocked(m.unlocked, m.fresh); if (m.fresh?.length) shell.toast('species', `New in the codex: ${m.fresh.map((id: string) => TEMPLATE_BY_ID[id]?.name).filter(Boolean).slice(0, 3).join(', ')}`); break;
+      case 'codex': codex.setUnlocked(m.unlocked, m.fresh); if (m.fresh?.length && !demo) shell.toast('codex', `New in the codex: ${m.fresh.map((id: string) => TEMPLATE_BY_ID[id]?.name).filter(Boolean).slice(0, 3).join(', ')}`); break;
       case 'inspect':
         if (m.none) { if (tool.tool.kind === 'inspect') inspector.close(); break; }
         if (!inspector.current || inspector.current.uid !== m.data.uid) { if (m.data.gone) break; inspector.show(m.data.slot, m.data.uid); inspector.setFollow(false); }
         inspector.update(m.data); break;
       case 'web': statsUi.setWeb(m); break;
       case 'savedata': { const auto = pendingSaves.get(m.token) ?? false; pendingSaves.delete(m.token); storeSave(m.slot, m.data, auto); break; }
-      case 'choice': shell.setSpeed(0, false); shell.closePanels(); choiceModal.show(m); audio.choice(); break;
+      case 'choice': if (demo) { send({ t: 'answer', index: 0 }); break; } shell.setSpeed(0, false); shell.closePanels(); choiceModal.show(m); audio.choice(); break;
       case 'resume': shell.setSpeed(m.speed, false); break;
-      case 'ending': shell.setSpeed(0, false); shell.closePanels(); endings.show({ id: m.id, def: m.def, summary: m.summary, choices: m.choices, alive: m.alive, species: m.species }); audio.ending(m.def.kind === 'good'); break;
+      case 'ending': if (demo) break; shell.setSpeed(0, false); shell.closePanels(); endings.show({ id: m.id, def: m.def, summary: m.summary, choices: m.choices, alive: m.alive, species: m.species }); audio.ending(m.def.kind === 'good'); break;
       case 'loaded': shell.setBiome(m.biome); lastEnvBiome = ''; break;
     }
   };
@@ -226,12 +228,27 @@ async function boot() {
   setInterval(() => { if (inGame && slot && settings.autosave && !title.el.classList.contains('open')) requestSave(slot, true); }, 120000);
   document.addEventListener('visibilitychange', () => { if (document.hidden && inGame && slot && settings.autosave) requestSave(slot, true); });
 
-  // ---- title screen
+  // ---- title screen over a living demo world
+  const DEMO = ['grassland', 'reef', 'forest', 'savanna', 'mountains', 'rainforest', 'kelp'];
+  function startDemo() {
+    demo = true; inGame = false; slot = 0; resetViews();
+    const b = DEMO[(Math.random() * DEMO.length) | 0];
+    send({ t: 'cfg', config: { encounters: false } }); send({ t: 'init', seed: (Math.random() * 1e9) | 0, biome: b });
+    send({ t: 'speed', v: 1000 }); setTimeout(() => { if (demo) send({ t: 'speed', v: 5 }); }, 6000);
+  }
+  let panDir = 1, lastPan = performance.now();
+  const pan = () => {
+    const now = performance.now(), dt = Math.min(0.1, (now - lastPan) / 1000); lastPan = now;
+    if (title.isOpen && !renderer.follow) { const c = renderer.cam; c.tx += panDir * dt * 3; c.x = c.tx; const hw = c.sw / 2 / c.zoom; if (c.tx > W - hw - 2) panDir = -1; else if (c.tx < hw + 2) panDir = 1; }
+    requestAnimationFrame(pan);
+  };
+  requestAnimationFrame(pan);
   await refreshSlots();
+  startDemo();
   title.show(slots, slot);
   document.getElementById('boot')?.classList.add('gone');
   (window as any).petri = { renderer, send, worker, tool, newGame, loadSlot, requestSave, audio };
   const quick = new URLSearchParams(location.search).get('quick');
-  if (quick) newGame(0, 'Quick', quick);
+  if (quick) { demo = false; newGame(0, 'Quick', quick); }
 }
 boot().catch((e) => { console.error(e); document.querySelector('.boot-sub')!.textContent = 'Could not start: ' + e; });

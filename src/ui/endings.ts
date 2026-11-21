@@ -182,7 +182,7 @@ export class EndingScreen {
     const s = info.summary;
     this.el.innerHTML = `<div class="en-wrap"><canvas class="en-scene" width="${W}" height="${H}"></canvas><div class="en-title ${def.kind}">${def.title}</div><div class="en-text">${def.text.map((p) => `<p>${p}</p>`).join('')}</div>
       ${s ? `<div class="en-stats"><span><b>${s.name}</b> lasted until <b>${fmtYear(s.year)}</b></span><span>peak population <b>${s.peakPop >= 1000 ? (s.peakPop / 1000).toFixed(1) + ' billion' : Math.round(s.peakPop) + ' million'}</b></span>${info.alive !== undefined ? `<span><b>${info.alive}</b> of ${info.species} species still alive</span>` : ''}${info.choices?.length ? `<span><b>${info.choices.length}</b> great decisions</span>` : ''}</div>` : ''}
-      <div class="en-btns">${canContinue ? '<button class="pri" data-a="go">Keep exploring this world</button>' : ''}<button data-a="title">Title screen</button></div></div>`;
+      <div class="en-btns">${canContinue ? '<button class="pbtn pri" data-a="go">Keep exploring this world</button>' : ''}<button class="pbtn" data-a="title">Title screen</button></div></div>`;
     this.el.classList.add('open'); this.el.scrollTop = 0;
     const cv = this.el.querySelector('canvas')!, ctx = cv.getContext('2d')!; ctx.imageSmoothingEnabled = false;
     const t0 = performance.now(); cancelAnimationFrame(this.raf);
