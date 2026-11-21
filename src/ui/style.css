@@ -340,3 +340,13 @@ body.title-mode #ui { z-index: 45; }
 @media (max-width: 720px) { .wl-steps { grid-template-columns: 1fr; } }
 /* #ui > * re-enables pointer events on direct children; inert ones must stay click-through */
 .panel:not(.open), .debug { pointer-events: none !important; }
+@media (max-width: 720px) {
+  :root { --bar: 104px; }
+  .hud-top { flex-wrap: wrap; height: auto; gap: 6px; top: 6px; left: 6px; right: 6px; }
+  .hud-brand, .spacer { display: none; }
+  .hud-era { flex: 1 1 100%; max-width: none; min-height: 46px; }
+  .hud-time { flex: 1 1 auto; justify-content: space-between; min-height: 46px; }
+  .hud-sys { min-height: 46px; } .hud-sys .tb:not(:last-child) { display: none; }
+  .hud-time .tb:nth-child(3) { display: grid; }
+  .inspector { top: calc(var(--bar) + 12px); }
+}
