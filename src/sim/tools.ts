@@ -30,7 +30,7 @@ export function speciesForTemplate(ctx: Ctx, tpl: Template, tick: number): { id:
   return { id, g };
 }
 
-export interface SpawnResult { ok: boolean; msg: string; placed: number; species?: number }
+export interface SpawnResult { ok: boolean; msg: string; placed: number; species?: number; warn?: boolean }
 
 /** Place `n` creatures of a codex template at (x, y) in the active world, respecting what each needs to live in. */
 export function placeTemplate(w: World, ctx: Ctx, tplId: string, x: number, y: number, n: number): SpawnResult {
@@ -40,7 +40,8 @@ export function placeTemplate(w: World, ctx: Ctx, tplId: string, x: number, y: n
   if (IS_SOLID[m] && (tpl.habitat === 'land' || tpl.habitat === 'sky' || tpl.habitat === 'any')) {
     let yy = y | 0; while (yy > 0 && IS_SOLID[w.cellMedium(x, yy)]) yy--; y = yy - 0.5; m = w.cellMedium(x, y);
   }
-  if (!habitatOk(tpl, m)) return { ok: false, msg: `${tpl.name} needs ${NEED[tpl.habitat]} — try somewhere else.`, placed: 0 };
+  if (IS_SOLID[m]) return { ok: false, msg: 'That spot is solid rock — try open space.', placed: 0 };
+  const misplaced = !habitatOk(tpl, m);
   const { id, g } = speciesForTemplate(ctx, tpl, w.tick);
   if (w.mode === 'coarse') {
     if (viability(w, g) < 0.12) return { ok: false, msg: `${tpl.name} can't survive in this biome.`, placed: 0 };
@@ -50,19 +51,30 @@ export function placeTemplate(w: World, ctx: Ctx, tplId: string, x: number, y: n
   let placed = 0; const tmp = new Float32Array(NG);
   for (let k = 0; k < n; k++) {
     const px = clamp(x + (k === 0 ? 0 : (w.rng.next() - 0.5) * 6), 1, W - 2), py = y + (k === 0 ? 0 : (w.rng.next() - 0.5) * 3);
-    if (!habitatOk(tpl, w.cellMedium(px, py))) continue;
+    if (IS_SOLID[w.cellMedium(px, py)]) continue;
     mutate(tmp, 0, g, 0, w.rng, k === 0 ? 0 : 0.2); for (let i = 0; i < NG; i++) if (k === 0) tmp[i] = g[i];
     if (spawn(w, ctx, id, tmp, 0, px, py, { grown: true, energyFrac: 0.85 }) >= 0) placed++;
   }
   if (!placed) return { ok: false, msg: 'No room for that here.', placed: 0 };
   const v = viability(w, g);
+  if (misplaced) return { ok: true, placed, species: id, msg: `${tpl.name} is out of its element here — it needs ${NEED[tpl.habitat]}.`, warn: true } as SpawnResult;
   return { ok: true, placed, species: id, msg: v < 0.25 ? `${tpl.name} placed — it may struggle in this biome.` : `${tpl.name} placed.` };
 }
 
-// ------------------------------------------------------------------ god powers
-import { POWERS } from '../data/powers';
+/** Place individuals of an existing (evolved) species somewhere else. */
+export function placeSpecies(w: World, ctx: Ctx, id: number, x: number, y: number, n: number): SpawnResult {
+  const g = ctx.sp.founders[id], info = ctx.sp.list[id]; if (!g || !info) return { ok: false, msg: 'Unknown species.', placed: 0 };
+  if (IS_SOLID[w.cellMedium(x, y)]) return { ok: false, msg: 'That spot is solid rock — try open space.', placed: 0 };
+  if (w.mode === 'coarse') { introduce(w, ctx, id, g, n * 4); return { ok: true, msg: `${info.name} released.`, placed: n * 4, species: id }; }
+  w.allocEntities(); let placed = 0; const tmp = new Float32Array(NG);
+  for (let k = 0; k < n; k++) { const px = clamp(x + (k ? (w.rng.next() - 0.5) * 6 : 0), 1, W - 2), py = y + (k ? (w.rng.next() - 0.5) * 3 : 0); if (IS_SOLID[w.cellMedium(px, py)]) continue; mutate(tmp, 0, g, 0, w.rng, 0.15); if (spawn(w, ctx, id, tmp, 0, px, py, { grown: true, energyFrac: 0.85 }) >= 0) placed++; }
+  if (!placed) return { ok: false, msg: 'No room for that here.', placed: 0 };
+  const v = viability(w, g); return { ok: true, placed, species: id, msg: v < 0.2 ? `${info.name} placed — it may not survive here.` : `${info.name} placed.`, warn: v < 0.2 };
+}
 
-function inRange(w: World, x: number, y: number, r: number, fn: (i: number, d: number) => void) {
+// ------------------------------------------------------------------ god powers
+
+export function inRange(w: World, x: number, y: number, r: number, fn: (i: number, d: number) => void) {
   const e = w.ents; if (!e) return; const r2 = r * r;
   for (let i = 0; i < e.hi; i++) {
     if (e.kind[i] === K_FREE) continue;
@@ -71,14 +83,14 @@ function inRange(w: World, x: number, y: number, r: number, fn: (i: number, d: n
   }
 }
 
-function hurtEnt(w: World, ctx: Ctx, i: number, amt: number, cause: string) {
+export function hurtEnt(w: World, ctx: Ctx, i: number, amt: number, cause: string) {
   const e = w.ents; if (e.kind[i] === K_CARCASS) { e.energy[i] *= 0.6; return; }
   e.health[i] -= amt; e.hurt[i] = 6;
   ctx.events.push({ t: 'hit', x: e.x[i], y: e.y[i], dx: Math.sign(e.vx[i]) || 1, size: e.size[i], sp: e.species[i], amt });
   if (e.health[i] <= 0) die(w, ctx, i, cause);
 }
 
-function carve(w: World, cx: number, cy: number, r: number) {
+export function carve(w: World, cx: number, cy: number, r: number) {
   for (let y = Math.max(0, (cy - r) | 0); y <= Math.min(H - 1, (cy + r) | 0); y++) for (let x = Math.max(0, (cx - r) | 0); x <= Math.min(W - 1, (cx + r) | 0); x++) {
     const dx = x - cx, dy = (y - cy) * 1.3; if (dx * dx + dy * dy > r * r) continue;
     const i = y * W + x; if (!IS_SOLID[w.medium[i]]) continue;
@@ -87,34 +99,6 @@ function carve(w: World, cx: number, cy: number, r: number) {
   w.edited = true;
   // re-derive surfaces for the touched columns
   for (let x = Math.max(0, (cx - r) | 0); x <= Math.min(W - 1, (cx + r) | 0); x++) { let s = 0; while (s < H && !IS_SOLID[w.medium[s * W + x]]) s++; w.surfaceY[x] = s; }
-}
-
-export function applyPower(w: World, ctx: Ctx, id: string, x: number, y: number): { ok: boolean; msg: string } {
-  const p = POWERS.find((q) => q.id === id); if (!p) return { ok: false, msg: 'Unknown power.' };
-  if (w.mode !== 'full' || !w.ents) return { ok: false, msg: 'Slow time down to use powers (1x–20x).' };
-  const r = p.radius, e = w.ents;
-  switch (id) {
-    case 'meteor': {
-      inRange(w, x, y, r * 2, (i, d) => { if (d < 0.5) { ctx.events.push({ t: 'hit', x: e.x[i], y: e.y[i], dx: Math.sign(e.x[i] - x) || 1, size: e.size[i], sp: e.species[i], amt: 1 }); die(w, ctx, i, 'impact'); } else hurtEnt(w, ctx, i, (1 - d) * 1.6, 'impact'); });
-      carve(w, x, y + 2, 7); w.dust = Math.min(1, w.dust + 0.18); w.recomputeLight(); w.terrainVersion++;
-      ctx.events.push({ t: 'boom', x, y, r: 10 }); addDet(w, x, y, 20); break;
-    }
-    case 'lightning': {
-      ctx.events.push({ t: 'bolt', x, y });
-      inRange(w, x, y, r, (i, d) => hurtEnt(w, ctx, i, 0.9 - d * 0.5, 'lightning')); addNut(w, x, y, 1.5); break;
-    }
-    case 'plague': inRange(w, x, y, r, (i) => { if (e.kind[i] !== K_CARCASS && w.rng.next() < 0.7) e.flags[i] |= 1; }); break;
-    case 'heal': inRange(w, x, y, r, (i) => { if (e.kind[i] === K_CARCASS) return; e.health[i] = 1; e.energy[i] = Math.max(e.energy[i], e.maxE[i] * 0.9); e.flags[i] &= ~1; }); ctx.events.push({ t: 'glow', x, y, r }); break;
-    case 'fertilize': { const cx = (x / BLOCK) | 0, cy = (y / BLOCK) | 0, rb = Math.ceil(r / BLOCK); for (let dy = -rb; dy <= rb; dy++) for (let dx = -rb; dx <= rb; dx++) { const bx = cx + dx, by = cy + dy; if (bx < 0 || by < 0 || bx >= CW || by >= CH || dx * dx + dy * dy > rb * rb) continue; w.nutrients[by * CW + bx] = Math.min(2, w.nutrients[by * CW + bx] + 0.6); w.detritus[by * CW + bx] += 0.3; } ctx.events.push({ t: 'glow', x, y, r }); break; }
-    case 'mutagen': inRange(w, x, y, r, (i) => {
-      if (e.kind[i] === K_CARCASS) return; const gi = i * NG; const tmp = new Float32Array(NG);
-      mutate(tmp, 0, e.genome.subarray(gi, gi + NG), 0, w.rng, 9); for (let k = 0; k < NG; k++) e.genome[gi + k] = tmp[k];
-      const ns = ctx.sp.classify(e.species[i], e.genome, gi, w.tick);
-      if (ns !== e.species[i]) { ctx.sp.add(e.species[i], -1, w.tick); ctx.sp.add(ns, 1, w.tick); e.species[i] = ns; }
-      e.hurt[i] = 6;
-    }); ctx.events.push({ t: 'glow', x, y, r }); break;
-  }
-  return { ok: true, msg: p.name };
 }
 
 // ------------------------------------------------------------------ inspector

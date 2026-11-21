@@ -1,7 +1,8 @@
 // Random encounters: small surprises that make a long-running world feel alive.
 import { W, G, K_ANIMAL, IS_SOLID, AIR } from '../shared/constants';
 import type { Sim } from './sim';
-import { applyPower, placeTemplate } from './tools';
+import { placeTemplate } from './tools';
+import { applyPower } from './powers';
 import { TEMPLATES } from '../data/templates';
 import { introduce } from './coarse';
 import { livingIn } from './radiation';
@@ -15,16 +16,16 @@ const surfaceAt = (s: Sim, x: number) => { const w = s.world; let y = 0; while (
 const LIST: Encounter[] = [
   { id: 'bloom', weight: () => 1.4, run: (s) => {
     const w = s.world, x = randX(s); if (!w.ents) return false;
-    applyPower(w, s.ctx, 'fertilize', x, surfaceAt(s, x) + 6); toast(s, 'A nutrient upwelling', 'Minerals wash in. Expect a bloom of growth.'); return true;
+    applyPower(s, 'fertilize', x, surfaceAt(s, x) + 6, false); toast(s, 'A nutrient upwelling', 'Minerals wash in. Expect a bloom of growth.'); return true;
   } },
   { id: 'storm', weight: (s) => (s.world.def.noFloor || s.world.def.terrain.water > 0.6 ? 0.3 : 1), run: (s) => {
     const w = s.world; if (!w.ents) return false;
-    for (let k = 0; k < 4; k++) { const x = randX(s); applyPower(w, s.ctx, 'lightning', x, surfaceAt(s, x)); }
+    for (let k = 0; k < 4; k++) { const x = randX(s); applyPower(s, 'lightning', x, surfaceAt(s, x), false); }
     toast(s, 'A thunderstorm rolls through', 'Lightning scars the land.'); return true;
   } },
   { id: 'shower', weight: (s) => (s.era.reached >= 2 ? 0.5 : 0), run: (s) => {
     const w = s.world; if (!w.ents) return false;
-    for (let k = 0; k < 3; k++) { const x = randX(s); applyPower(w, s.ctx, 'meteor', x, surfaceAt(s, x)); }
+    for (let k = 0; k < 3; k++) { const x = randX(s); applyPower(s, 'meteor', x, surfaceAt(s, x), false); }
     toast(s, 'Meteor shower', 'Debris falls from the sky.'); return true;
   } },
   { id: 'outbreak', weight: () => 0.9, run: (s) => {

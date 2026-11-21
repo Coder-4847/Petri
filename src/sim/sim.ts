@@ -1,4 +1,4 @@
-import { W, H, TICK_RATE, K_FREE } from '../shared/constants';
+import { W, H, TICK_RATE, K_FREE, AIR, IS_WATER, IS_SOLID } from '../shared/constants';
 import { FRAME_STRIDE, type ToWorker } from '../shared/protocol';
 import { BIOMES, BIOME_INDEX } from '../data/biomes';
 import { ERAS } from '../data/eras';
@@ -10,7 +10,8 @@ import { seedMicrobes } from './seed';
 import { collapseWorld, expandWorld, stepCoarse, COARSE_STEP, ensureCoarse, maybeDisperse } from './coarse';
 import { radiate, livingIn } from './radiation';
 import { newEraState, evaluateEras, type EraState } from './eras';
-import { placeTemplate, applyPower, pickEntity, inspect, foodWeb, unlockedTemplates, scanDiscoveries } from './tools';
+import { applyPower } from './powers';
+import { placeTemplate, placeSpecies, pickEntity, inspect, foodWeb, unlockedTemplates, scanDiscoveries } from './tools';
 import { runEncounter } from './encounters';
 import { newCiv, startCiv, stepCiv, answerCiv, summary as civSummary, civEra, YEARS_PER_TICK, type CivState } from './civ';
 import { countThinkers, applyEnding, civPressure, civProgress } from './civfx';
@@ -18,7 +19,7 @@ import { ENDINGS } from '../data/civ';
 import { snapshot, restore, type SaveData } from './save';
 
 type Post = (msg: any, transfer?: Transferable[]) => void;
-export interface Timed { tick: number; world: number; key: string; delta: number }
+export interface Timed { tick: number; world: number; key: string; delta: number; cells?: number[] }
 
 /**
  * The simulation host (runs inside a Web Worker).
@@ -51,6 +52,7 @@ export class Sim {
   found = new Set<string>();
   timed: Timed[] = [];
   config = { encounters: true };
+  lifeless = false;
   civ: CivState = newCiv(this.rng); civTicks = 0; thinkers = 0; lastCiv = 0; lastPressure = 0; resumeSpeed = 1;
   codexDirty = true; lastCodex = 0; nextEncounter = 0; lastScan = 0; lastCodexKey = '';
 
@@ -63,7 +65,7 @@ export class Sim {
     this.seed = seed; this.rng = new RNG(seed);
     this.ctx = { sp: new SpeciesRegistry(this.rng), events: [], era: undefined };
     this.era = newEraState(); this.ctx.era = this.era;
-    this.hookRegistry(); this.civ = newCiv(this.rng); this.civTicks = 0; this.thinkers = 0; this.found = new Set(); this.timed = []; this.codexDirty = true; this.history = [];
+    this.hookRegistry(); this.lifeless = false; this.civ = newCiv(this.rng); this.civTicks = 0; this.thinkers = 0; this.found = new Set(); this.timed = []; this.codexDirty = true; this.history = [];
     this.worlds = BIOMES.map((_, i) => { const w = new World(i, seed); w.ctxRef = this.ctx; return w; });
     this.ctx.worlds = this.worlds;
     this.active = BIOME_INDEX[biome] ?? 0;
@@ -87,15 +89,22 @@ export class Sim {
   }
 
   /** Nudge an environment value for a while, then put it back. */
-  timedEnv(key: string, delta: number, ticks: number) {
-    const w = this.world; const before = (w.env as any)[key] as number; const next = Math.max(0, Math.min(1, before + delta));
+  timedEnv(key: string, delta: number, ticks: number, world = this.active) {
+    const w = this.worlds[world]; const before = (w.env as any)[key] as number; const next = Math.max(0, Math.min(1, before + delta));
     (w.env as any)[key] = next; w.recomputeLight(); w.terrainVersion++;
     this.timed.push({ tick: w.tick + ticks, world: w.idx, key, delta: next - before });
   }
   private runTimed() {
     for (let i = this.timed.length - 1; i >= 0; i--) {
       const t = this.timed[i], w = this.worlds[t.world];
-      if (w.tick >= t.tick) { (w.env as any)[t.key] = Math.max(0, Math.min(1, (w.env as any)[t.key] - t.delta)); w.recomputeLight(); w.terrainVersion++; this.timed.splice(i, 1); }
+      if (w.tick < t.tick) continue;
+      if (t.key === 'flood' && t.cells) { // the flood drains away
+        for (const c of t.cells) if (IS_WATER[w.medium[c]]) w.medium[c] = AIR;
+        w.edited = true; for (let x = 0; x < W; x++) { let wt = -1; for (let y = 0; y < H; y++) { const m = w.medium[y * W + x]; if (IS_WATER[m]) { wt = y; break; } if (IS_SOLID[m]) break; } w.waterTop[x] = wt; }
+        if (w.ents) for (let k = 0; k < w.ents.hi; k++) if (w.ents.kind[k]) w.ents.vy[k] += 0.01;
+        if (w === this.world) this.post({ t: 'toast', kind: 'event', text: 'The flood waters recede' });
+      } else (w.env as any)[t.key] = Math.max(0, Math.min(1, (w.env as any)[t.key] - t.delta));
+      w.recomputeLight(); w.terrainVersion++; this.timed.splice(i, 1);
     }
   }
 
@@ -114,7 +123,8 @@ export class Sim {
       case 'biome': this.switchBiome(m.id); break;
       case 'view': this.view = { x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, zoom: m.zoom }; break;
       case 'spawn': { const w = this.world; const r = placeTemplate(w, this.ctx, (m as any).tpl, (m as any).x, (m as any).y, (m as any).n ?? 1); this.post({ t: 'spawned', ...r, tpl: (m as any).tpl }); break; }
-      case 'power': { const r = applyPower(this.world, this.ctx, (m as any).id, (m as any).x, (m as any).y); this.post({ t: 'powered', ...r, id: (m as any).id }); break; }
+      case 'spawnSpecies': { const mm = m as any; const r = placeSpecies(this.world, this.ctx, mm.id, mm.x, mm.y, mm.n ?? 1); this.post({ t: 'spawned', ...r }); break; }
+      case 'power': { const r = applyPower(this, (m as any).id, (m as any).x, (m as any).y, !!(m as any).large); this.post({ t: 'powered', ...r, id: (m as any).id }); break; }
       case 'inspect': {
         const mm = m as any; let slot = mm.slot, uid = mm.uid;
         if (mm.x !== undefined) { const p = pickEntity(this.world, mm.x, mm.y, mm.zoom ?? 4); if (!p) { this.post({ t: 'inspect', none: true }); break; } slot = p.slot; uid = p.uid; }
@@ -223,6 +233,8 @@ export class Sim {
   /** Once per second: start civilization when thinkers exist, keep eras in sync, apply slow feedback on the world. */
   private updateCiv(now: number) {
     const c = this.civ; const th = countThinkers(this);
+    // all life gone (usually by the player's hand): the extinction ending
+    if (!this.lifeless && this.totalTicks > 400) { let alive = 0; const sp = this.ctx.sp; for (let i = 0; i < sp.list.length && !alive; i++) alive += sp.count[i]; if (!alive) { this.lifeless = true; c.finished = true; c.active = false; this.handleCivEvents([{ t: 'ending', id: 'lifeless' }]); } }
     this.thinkers = th.n;
     if (!c.started && this.era.reached >= 8 && th.n >= 8) {
       startCiv(c, th.best); this.history.push({ t: this.totalTicks, kind: 'civ', text: `${th.best} begin to farm and settle` });
@@ -249,7 +261,7 @@ export class Sim {
       else if (ev.t === 'ending') {
         const def = ENDINGS[ev.id]; applyEnding(this, def); this.resumeSpeed = this.speed || 1; this.speed = 0;
         this.history.push({ t: this.totalTicks, kind: 'ending', text: def.title });
-        this.post({ t: 'ending', id: ev.id, def, summary: civSummary(this.civ), choices: this.civ.choices.slice(-12), species: this.ctx.sp.list.length, alive: this.liveSpecies() });
+        this.post({ t: 'ending', id: ev.id, def, summary: civSummary(this.civ), choices: this.civ.choices.slice(-12), species: this.ctx.sp.list.length, alive: this.liveSpecies(), ma: this.era.clock });
       }
     }
   }
@@ -326,6 +338,6 @@ export class Sim {
     const sp = this.ctx.sp; let alive = 0, ever = sp.list.length; for (let i = 0; i < ever; i++) if (sp.count[i] > 0) alive++;
     ensureCoarse(w);
     this.post({ t: 'stats', stats: { tick: this.totalTicks, biome: w.def.id, mode: w.mode, entities: ents, species: alive, speciesEver: ever, counts: pops, simMs: this.simMs, tps: this.tps, env: { ...w.env },
-      civ: this.civ.started ? civSummary(this.civ) : null, era: { reached: this.era.reached, progress: this.era.progress, clock: this.era.clock, leader: this.era.leader } } });
+      extinct: sp.extinctions.slice(-25).map((x) => ({ name: x.name, tick: x.tick, peak: x.peak })), civ: this.civ.started ? civSummary(this.civ) : null, era: { reached: this.era.reached, progress: this.era.progress, clock: this.era.clock, leader: this.era.leader } } });
   }
 }

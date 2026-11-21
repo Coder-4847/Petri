@@ -330,3 +330,13 @@ body.title-mode #ui > *:not(.panel) { opacity: 0 !important; pointer-events: non
 .newform .biomes { max-height: 30vh; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
 .newform .biome .sw { height: 40px; } .newform .biome .nm { font-size: 12px; padding: 4px 6px 5px; }
 .newform .seg { flex-wrap: wrap; }
+
+.pw-size { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12px; color: var(--dim); }
+.pw-h { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--faint); margin: 10px 0 6px; }
+
+body.title-mode #ui { z-index: 45; }
+.welcome .hbox { width: min(620px, 94vw); } .welcome .wl { color: #c8d4e4; line-height: 1.55; font-size: 14px; margin: 0 0 14px; } .welcome .wl b { color: var(--gold); font-weight: 500; }
+.wl-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .wl-steps div { padding: 8px 10px; background: #0a0f1a; box-shadow: inset 0 0 0 2px #182134; } .wl-steps b { display: block; color: var(--accent); font-weight: 500; font-size: 13px; margin-bottom: 4px; } .wl-steps span { font-size: 12px; color: var(--dim); line-height: 1.4; }
+@media (max-width: 720px) { .wl-steps { grid-template-columns: 1fr; } }
+/* #ui > * re-enables pointer events on direct children; inert ones must stay click-through */
+.panel:not(.open), .debug { pointer-events: none !important; }

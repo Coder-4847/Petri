@@ -12,12 +12,16 @@ No external art or audio: every sprite is generated from genes at runtime and ev
 - **Time**: pause, 1x, 5x, 20x run individual creatures; 100x and deep time run populations while individuals are redrawn.
 - **Biomes**: 18 cross-sections (coral reef to volcanic island to open sky). All of them keep evolving while you look elsewhere.
 - **Tweak**: sliders for temperature, humidity, sunlight, oxygen, salinity, nutrients, toxins and gravity. Life adapts over generations.
-- **Codex / spawn**: 92 creatures. Common ones unlock with the era, rarer ones when something similar evolves, legends and strangers only by chance.
+- **Codex / spawn**: 96 creature templates plus every species your world evolves. Common ones unlock with the era, rarer ones when something similar evolves, legends and strangers only by chance.
 - **Inspector**: click a creature for its diet, state, health, traits and ancestry; follow it with the camera.
-- **Powers**: meteor, lightning, plague, bless, fertilise, mutagen.
+- **Powers**: meteors and asteroids, mineral meteors, lightning storms, volcanoes, floods, ice ages, droughts, plagues, blessings, fertiliser and mutagen rain — each in a small and a large version.
 - **Stats**: population by role and a live food web.
 - **Society**: when a clever, social species thrives, civilization begins. Make the great decisions, watch the doom clock, reach an ending.
 - **Worlds**: five save slots in IndexedDB (thumbnail, era, playtime, autosave), export/import as `.petri` files.
+
+## Controls
+
+Drag or WASD to pan · scroll / pinch to zoom · click to inspect · Space pause · [ ] speed · 1–8 panels · H photo mode · F fullscreen · ? help
 
 ## Develop
 

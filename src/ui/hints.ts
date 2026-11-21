@@ -4,7 +4,7 @@ import { settings, saveSettings } from './settings';
 interface Hint { id: string; at: number; text: string; when?: (c: HintCtx) => boolean }
 export interface HintCtx { speed: number; panelOpen: boolean; modal: boolean }
 const HINTS: Hint[] = [
-  { id: 'move', at: 4, text: 'Drag to pan, scroll or pinch to zoom. Zoom in close to watch single creatures.' },
+  { id: 'move', at: 8, text: 'Drag to pan, scroll or pinch to zoom. Zoom in close to watch single creatures.' },
   { id: 'speed', at: 40, text: 'Use the speed buttons at the top right. In time-lapse and deep time, whole populations evolve.', when: (c) => c.speed <= 5 },
   { id: 'tweak', at: 85, text: 'Open Tweak to change temperature, humidity, light and more. Life adapts over many generations.' },
   { id: 'inspect', at: 130, text: 'Click any creature to inspect it. The Codex unlocks new species to place as life evolves.' },
@@ -22,6 +22,17 @@ export class Hints {
   constructor() {
     try { for (const id of JSON.parse(localStorage.getItem(KEY) ?? '[]')) this.seen.add(id); } catch { /* ignore */ }
     this.el.className = 'hint-card'; document.getElementById('ui')?.appendChild(this.el);
+  }
+  /** One-time welcome for a first world: what is going on and what to try first. */
+  welcome() {
+    if (this.seen.has('welcome')) return; this.seen.add('welcome'); this.persist();
+    const w = document.createElement('div'); w.className = 'help open welcome';
+    w.innerHTML = `<div class="hbox px-accent"><h2>Welcome to Petri</h2>
+      <p class="wl">This planet is <b>3.8 billion years old</b>, and every biome is full of microbes. Nothing is scripted: what happens next comes from mutation, hunger and chance.</p>
+      <div class="wl-steps"><div><b>1 · Speed up time</b><span>Top right. At 100x and deep time, whole populations evolve in seconds.</span></div><div><b>2 · Steer evolution</b><span>Tweak heat, light, oxygen… life adapts over generations.</span></div><div><b>3 · Look closer</b><span>Scroll to zoom, click any creature to inspect it.</span></div></div>
+      <div style="margin-top:16px;text-align:right"><button class="pbtn pri">Let life begin</button></div></div>`;
+    w.onclick = (e) => { if ((e.target as HTMLElement).closest('button')) w.remove(); };
+    document.body.appendChild(w);
   }
   private persist() { try { localStorage.setItem(KEY, JSON.stringify([...this.seen])); } catch { /* ignore */ } }
   /** Call about once a second with the seconds played in this session. */

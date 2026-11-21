@@ -156,3 +156,35 @@
 - Hydrothermal vents stay producer/decomposer-only for long stretches (consumers arrive by dispersal).
 - Era pacing in deep time varies a lot by seed (intended, but may feel slow or fast).
 - Night lighting for cities and a day/night cycle are not implemented.
+
+## Polish pass (v1.1): visuals, UI/UX and a full audit — DONE
+Done after reviewing the game against the master prompt. Highlights:
+- **Ground art** (`render/ground.ts`): hue-shifted 8-step ramps per material, Voronoi stone blocks, strata, sand ripples,
+  basalt columns, crystal facets, ice streaks; rim light on exposed edges; dithered ambient occlusion and a fade to dark
+  underground; grass blades and flowers per biome, turf, roots, pebbles, ammonite fossils, ore veins, stalactites,
+  moss, snow caps. Repaints only when the grid changes (env/light changes no longer repaint).
+- **Backgrounds**: faceted, snow-capped mountains with haze; hills with tree lines; real pixel conifers/broadleaf trees;
+  shaded cumulus clouds; colourful coral, kelp with blades, reeds with cattails, a shaded volcano; dithered sky gradient.
+  Background pixel scale is capped so it stays crisp at high zoom.
+- **Water**: god rays, foam, subsurface band. **Day & night** (`render/daynight.ts`): sun and moon arcs, stars, dusk glow,
+  colour grading of sky/backgrounds/world/water, stronger glows and lit city windows at night (toggle in settings).
+- **Creatures**: walkers stand on the ground (feet alignment), clamped tilt, nicer blood splats, buildings to scale.
+- **Camera** frames the land surface or the sea floor when a biome loads.
+- **UI**: crisp 9-slice pixel skin (`ui/skin.ts`); living title screen (a demo world evolves behind the menu) with Continue /
+  New world (name, biome previews, slot) / Load / Settings / How to play; HUD with world + biome, era timeline with
+  tooltips and "next milestone", labelled speeds, photo mode (H), fullscreen (F), help (?); dock with hotkeys 1–8;
+  custom tooltips; era banners, a folded event feed, snackbars for feedback; welcome card for first-time players.
+- **Audit fixes vs. the prompt**:
+  - Spawn anywhere: wrong-medium placements are allowed and warned (a lion in the sea drowns, a fish on land suffocates).
+  - God powers now: meteor, meteor shower, asteroid (large = planet-wide mass extinction), mineral meteor (crystals,
+    nutrients, may bring a stranger), lightning/thunderstorm, volcano, flood (drains later), ice age, drought, plague/pandemic,
+    bless, fertilise, mutagen rain — each with Small and Large versions.
+  - Codex: "Your species" tab with every evolved species (sprite, status, diet, size, ancestry), which can be placed
+    elsewhere; added hydra, leviathan, sky jelly and void whale (16 legends and strangers in total).
+  - Stats: top-species population graph, biodiversity (Shannon) score, extinction log, chronicle.
+  - Extinction ending when all life is wiped out before civilization ("The Silent Planet").
+  - Graceful message when WebGL is unavailable.
+- Bugs fixed: closed panels intercepting clicks after the CSS rewrite; vertex shader overwritten during the water
+  upgrade; HUD showing through the title; settings unreachable from the title; toast spam.
+- Regression (headless Chromium): title → settings → new world → all 8 panels via hotkeys → every power (small and large)
+  → spawning in the wrong medium — no console errors.

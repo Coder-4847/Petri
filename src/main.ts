@@ -7,7 +7,7 @@ import { Stats } from './ui/stats';
 import { ToolUI } from './ui/toolbar';
 import { SlotList, TitleScreen, type SlotHooks } from './ui/menu';
 import { listSlots, putSlot, getSlot, deleteSlot, exportBlob, importBlob, download, type SaveMeta } from './ui/saves';
-import { POWERS } from './data/powers';
+import { POWERS, POWER_BY_ID } from './data/powers';
 import { TEMPLATE_BY_ID } from './data/templates';
 import { BIOMES } from './data/biomes';
 import { ERAS } from './data/eras';
@@ -28,7 +28,9 @@ async function boot() {
   }
   const stage = document.getElementById('stage')!;
   const renderer = new Renderer();
-  await renderer.init(stage);
+  try { await renderer.init(stage); } catch (e) {
+    console.error(e); document.querySelector('.boot-sub')!.innerHTML = 'Petri needs WebGL, and this browser could not start it.<br>Try a recent Chrome, Firefox, Edge or Safari, or enable hardware acceleration.'; document.querySelector('.boot-cells')?.remove(); return;
+  }
 
   const worker = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' });
   const send = (m: any) => worker.postMessage(m);
@@ -39,6 +41,7 @@ async function boot() {
   let slotName = 'Untitled';
   let playSec = 0;
   let inGame = false; let sessionSec = 0; let demo = false;
+  const quickMode = new URLSearchParams(location.search).has('quick');
   let slots: (SaveMeta | null)[] = [];
   const refreshSlots = async () => { slots = await listSlots(); worldList.render(slots, slot); if (title.el.classList.contains('open')) title.list.render(slots, slot); };
 
@@ -63,6 +66,8 @@ async function boot() {
   (zc.children[0] as HTMLElement).onclick = () => renderer.cam.zoomAt(renderer.cam.sw / 2, renderer.cam.sh / 2, 1.4); (zc.children[1] as HTMLElement).onclick = () => renderer.cam.zoomAt(renderer.cam.sw / 2, renderer.cam.sh / 2, 1 / 1.4);
   shell.root.appendChild(zc);
 
+  const hints = new Hints();
+
   // ---- tools: inspect / place / powers
   const tool = new ToolUI(shell.root, stage, () => renderer.cam.zoom);
   const inspector = new Inspector((id) => renderer.creatures.spriteFrame(id));
@@ -77,23 +82,35 @@ async function boot() {
   renderer.onPick = (x, y) => {
     const t = tool.tool;
     if (t.kind === 'inspect') send({ t: 'inspect', x, y, zoom: renderer.cam.zoom });
-    else if (t.kind === 'spawn') send({ t: 'spawn', tpl: t.tpl, x, y, n: t.n });
-    else send({ t: 'power', id: t.id, x, y });
+    else if (t.kind === 'spawn') send(t.species !== undefined ? { t: 'spawnSpecies', id: t.species, x, y, n: t.n } : { t: 'spawn', tpl: t.tpl, x, y, n: t.n });
+    else send({ t: 'power', id: t.id, x, y, large: t.large });
   };
 
   // ---- codex
   const codex = new Codex((tpl, n) => { tool.set({ kind: 'spawn', tpl, name: TEMPLATE_BY_ID[tpl].name, n }); shell.closePanels(); });
+  codex.species = () => [...renderer.creatures.info.values()]; codex.sprite = (id) => renderer.creatures.spriteFrame(id);
+  codex.onPickSpecies = (id, n) => { const info = renderer.creatures.info.get(id); tool.set({ kind: 'spawn', tpl: '', species: id, name: info?.name ?? 'species', n }); shell.closePanels(); };
   shell.addPanel('codex', 'book', 'Codex', codex.el, (open) => { if (open) { codex.open(); codex.clearFresh(); } }, '<b>Codex</b> — every creature you have discovered; place them in the world');
 
   // ---- powers
-  const pw = document.createElement('div');
-  pw.innerHTML = `<h3>Powers <span class="sub">Act on the world. Time must be running at 1x–20x.</span></h3><div class="powers"></div>`;
-  for (const p of POWERS) {
-    const b = document.createElement('button'); b.className = 'power'; b.innerHTML = `<span class="pico">${icon(p.icon, 20)}</span><span><b>${p.name}</b><i>${p.blurb}</i></span>`;
-    b.onclick = () => { tool.set({ kind: 'power', id: p.id, name: p.name, radius: p.radius, ico: p.icon }); shell.closePanels(); };
-    pw.querySelector('.powers')!.appendChild(b);
+  const pw = document.createElement('div'); pw.classList.add('wide');
+  pw.innerHTML = `<h3>Powers <span class="sub">Most powers need time running at 1x–20x.</span></h3><div class="pw-size"><span>Scale</span><span class="seg"><button data-l="0" class="on">Small</button><button data-l="1">Large</button></span></div><div class="pw-groups"></div>`;
+  let powerLarge = false;
+  pw.querySelectorAll<HTMLElement>('.pw-size button').forEach((b) => (b.onclick = () => { powerLarge = b.dataset.l === '1'; pw.querySelectorAll('.pw-size button').forEach((x) => x.classList.toggle('on', x === b)); }));
+  const groups: Record<string, string> = { sky: 'From the sky', earth: 'Earth & climate', life: 'Life' };
+  for (const gid of Object.keys(groups)) {
+    const sec = document.createElement('div'); sec.innerHTML = `<div class="pw-h">${groups[gid]}</div><div class="powers"></div>`; pw.querySelector('.pw-groups')!.appendChild(sec);
+    for (const p of POWERS.filter((q) => q.group === gid)) {
+      const b = document.createElement('button'); b.className = 'power'; b.innerHTML = `<span class="pico">${icon(p.icon, 20)}</span><span><b>${p.name}</b><i>${p.blurb}</i></span>`;
+      b.onclick = () => {
+        shell.closePanels();
+        if (!p.target) { const v = renderer.cam.view(); send({ t: 'power', id: p.id, x: (v.x0 + v.x1) / 2, y: (v.y0 + v.y1) / 2, large: powerLarge }); return; }
+        tool.set({ kind: 'power', id: p.id, name: p.name + (powerLarge ? ' (large)' : ''), radius: p.radius * (powerLarge ? 2.2 : 1), ico: p.icon, large: powerLarge });
+      };
+      sec.querySelector('.powers')!.appendChild(b);
+    }
   }
-  shell.addPanel('powers', 'bolt', 'Powers', pw, undefined, '<b>Powers</b> — meteors, plagues, blessings and mutagens');
+  shell.addPanel('powers', 'bolt', 'Powers', pw, undefined, '<b>Powers</b> — meteors, volcanoes, floods, ice ages, plagues, blessings');
 
   // ---- stats & food web
   const statsUi = new Stats(); statsUi.requestWeb = () => send({ t: 'web' });
@@ -166,6 +183,7 @@ async function boot() {
     send({ t: 'init', seed: (Math.random() * 1e9) | 0, biome: b }); send({ t: 'speed', v: 1 }); shell.setSpeed(1, false);
     title.hide(); shell.setBiome(b);
     if (s) setTimeout(() => requestSave(s, true), 2500);
+    if (settings.hints && !quickMode) setTimeout(() => hints.welcome(), 900);
   }
   async function loadSlot(s: number) {
     const data = await getSlot(s), meta = slots[s - 1]; if (!data || !meta) { shell.toast('warn', 'That slot is empty'); return; }
@@ -184,7 +202,7 @@ async function boot() {
     renderer.settlements.set(s.civ ? { pop: s.civ.pop, tech: s.civ.tech } : null, !!(s.civ?.finished && s.civ.ending && ENDINGS[s.civ.ending]?.wipeCiv));
     if (s.biome !== lastEnvBiome) { lastEnvBiome = s.biome; shell.setBiome(s.biome); shell.setEnv(s.env); }
     const rows = Object.entries(s.counts as Record<string, number>).filter(([, n]) => n > 0).map(([id, pop]) => { const i = renderer.creatures.info.get(+id); return i ? { id: +id, name: i.name, color: i.color, role: roleOf(i.genome), size: 0.12 * Math.pow(250, i.genome[0]), pop } : null; }).filter(Boolean) as any[];
-    statsUi.push(rows, s.species);
+    statsUi.push(rows, s.species, s.extinct);
     rows.sort((a, b) => b.size - a.size || b.pop - a.pop);
     shell.setLife(rows.slice(0, 60), s.species, s.speciesEver);
   }
@@ -197,8 +215,8 @@ async function boot() {
       case 'species': renderer.creatures.setSpecies(m.list); break;
       case 'stats': onStats(m.stats); break;
       case 'toast': if (title.isOpen || demo) break; shell.toast(m.kind, m.text, m.sub); audio.toast(m.kind); break;
-      case 'spawned': shell.toast(m.ok ? 'ok' : 'warn', m.msg); if (m.ok) audio.pop(); break;
-      case 'powered': if (!m.ok) shell.toast('warn', m.msg); break;
+      case 'spawned': shell.toast(m.ok && !m.warn ? 'ok' : 'warn', m.msg); if (m.ok) audio.pop(); break;
+      case 'powered': if (!m.ok) shell.toast('warn', m.msg); else if (POWER_BY_ID[m.id] && !POWER_BY_ID[m.id].target) shell.snack(`${m.msg} begins`); break;
       case 'codex': codex.setUnlocked(m.unlocked, m.fresh); if (m.fresh?.length && !demo) shell.toast('codex', `New in the codex: ${m.fresh.map((id: string) => TEMPLATE_BY_ID[id]?.name).filter(Boolean).slice(0, 3).join(', ')}`); break;
       case 'inspect':
         if (m.none) { if (tool.tool.kind === 'inspect') inspector.close(); break; }
@@ -208,7 +226,7 @@ async function boot() {
       case 'savedata': { const auto = pendingSaves.get(m.token) ?? false; pendingSaves.delete(m.token); storeSave(m.slot, m.data, auto); break; }
       case 'choice': if (demo) { send({ t: 'answer', index: 0 }); break; } shell.setSpeed(0, false); shell.closePanels(); choiceModal.show(m); audio.choice(); break;
       case 'resume': shell.setSpeed(m.speed, false); break;
-      case 'ending': if (demo) break; shell.setSpeed(0, false); shell.closePanels(); endings.show({ id: m.id, def: m.def, summary: m.summary, choices: m.choices, alive: m.alive, species: m.species }); audio.ending(m.def.kind === 'good'); break;
+      case 'ending': if (demo) break; shell.setSpeed(0, false); shell.closePanels(); endings.show({ id: m.id, def: m.def, summary: m.summary, choices: m.choices, alive: m.alive, species: m.species, ma: m.ma }); audio.ending(m.def.kind === 'good'); break;
       case 'loaded': shell.setBiome(m.biome); lastEnvBiome = ''; break;
     }
   };
@@ -223,7 +241,6 @@ async function boot() {
   }, 250);
 
   // playtime and autosave
-  const hints = new Hints();
   setInterval(() => { if (inGame && !document.hidden) { playSec += 1; hints.tick(sessionSec++, { speed: shell.speed, panelOpen: false, modal: document.querySelector('.choice.open,.ending.open,.title.open,.panel.open') !== null }); } }, 1000);
   setInterval(() => { if (inGame && slot && settings.autosave && !title.el.classList.contains('open')) requestSave(slot, true); }, 120000);
   document.addEventListener('visibilitychange', () => { if (document.hidden && inGame && slot && settings.autosave) requestSave(slot, true); });

@@ -22,7 +22,7 @@ export const sizeFromGene = (s: number) => 0.12 * Math.pow(250, s);
 // ---------------------------------------------------------------------------------- classification
 const TPL_ARCH: Record<string, [string, string]> = {
   coccus: ['micro', 'coccus'], bacillus: ['micro', 'bacillus'], spirillum: ['micro', 'spirillum'], flagellate: ['micro', 'flagellate'], ciliate: ['micro', 'ciliate'], diatom: ['micro', 'diatom'], amoeba: ['micro', 'amoeba'],
-  eel: ['worm', 'eel'], crab: ['arthropod', 'beetle'], turtle: ['turtle', ''], frog: ['frog', ''], croc: ['croc', ''], snake: ['snake', ''], bat: ['bat', 'bat'], pterosaur: ['bat', 'pterosaur'], butterfly: ['butterfly', ''], spider: ['spider', ''], ant: ['ant', ''], stego: ['quadruped', 'stego'], trike: ['quadruped', 'trike'], plesio: ['whale', 'plesio'], snail: ['snail', ''], clam: ['sessile', 'clam'], anemone: ['sessile', 'anemone'],
+  eel: ['worm', 'eel'], crab: ['arthropod', 'beetle'], turtle: ['turtle', ''], frog: ['frog', ''], croc: ['croc', ''], snake: ['snake', ''], hydra: ['snake', 'hydra'], bat: ['bat', 'bat'], pterosaur: ['bat', 'pterosaur'], butterfly: ['butterfly', ''], spider: ['spider', ''], ant: ['ant', ''], stego: ['quadruped', 'stego'], trike: ['quadruped', 'trike'], plesio: ['whale', 'plesio'], snail: ['snail', ''], clam: ['sessile', 'clam'], anemone: ['sessile', 'anemone'],
   volvox: ['colony', ''], stromatolite: ['mat', ''], choanoflagellate: ['colony', 'grazer'], sponge: ['sessile', 'sponge'], coral: ['sessile', 'coral'], jellyfish: ['jelly', ''],
   copepod: ['arthropod', 'crustacean'], trilobite: ['arthropod', 'trilobite'], worm: ['worm', ''], fish: ['fish', ''], dunkleosteus: ['fish', 'armored'], squid: ['squid', ''],
   moss: ['moss', ''], fern: ['fern', ''], tree: ['tree', ''], kelp: ['kelp', ''], insect: ['arthropod', 'insect'], dragonfly: ['arthropod', 'insect'], scorpion: ['arthropod', 'scorpion'],
@@ -376,6 +376,11 @@ const snake: Painter = (c, d, p) => {
   const hx = c.w - 4, hy = cy + Math.sin(hx * K - p.ph * 1.2) * amp; c.disc(hx + 1, hy, th * 1.15, th * 0.95, P.BASE); eye(c, hx + 1.5, hy - 1, Math.max(0.8, th * 0.35));
   const tl = 2 + p.atk * 3 + Math.max(0, Math.sin(p.ph * 2)) * 1.5; c.line(hx + th + 1, hy, hx + th + 1 + tl, hy, P.GORE); c.set(hx + th + 1 + tl, hy - 1, P.GORE); c.set(hx + th + 1 + tl, hy + 1, P.GORE);
   if (d.g[G.VENOM] > 0.4 && p.atk > 0.5) { c.set(hx + th, hy + 1, P.TOOTH); }
+  if (d.variant === 'hydra') for (let k = 1; k <= 2; k++) {
+    const bx = hx - L * 0.12 * k, by = cy + Math.sin(bx * K - p.ph * 1.2) * amp, ex = hx - L * 0.05 * k + Math.sin(p.ph + k) * 1.5, ey = Math.max(th + 1, by - L * (0.22 + 0.06 * k));
+    for (let t = 0; t <= 1; t += 0.06) { const x = bx + (ex - bx) * t, y = by + (ey - by) * t - Math.sin(t * Math.PI) * 2; c.disc(x, y, th * (0.85 - t * 0.2), th * (0.85 - t * 0.2), P.BASE); }
+    c.disc(ex + 1, ey, th * 1.05, th * 0.85, P.BASE); eye(c, ex + 1.5, ey - 1, Math.max(0.8, th * 0.3)); c.line(ex + th + 1, ey, ex + th + 2 + p.atk * 2, ey, P.GORE);
+  }
 };
 const bat: Painter = (c, d, p) => {
   const L = d.L, cx = c.w / 2 - 0.5, cy = c.h * 0.5, fl = Math.sin(p.ph * 1.7), pter = d.variant === 'pterosaur';

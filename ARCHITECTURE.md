@@ -122,6 +122,14 @@ Every biome exists from the first moment (`Sim.start`) and starts microbial (`si
   keyed to the era, one-shot effects, and a shared convolution reverb. It starts on the first user gesture.
 - `render/glow.ts` is an additive ParticleContainer; creatures with the `glow` sprite flag, lava columns and vents push soft light into it each frame.
 
+## Visual pipeline (v1.1)
+- Stage order: world-space sky → day/night layer (stars, sun, moon) → screen-space parallax → world container
+  (ground, stains, settlements, water back, creatures, FX, water front, ambient) → additive glow container (city lights,
+  bioluminescence, lava, vents) → vignette. Day/night tints the sky, parallax and world containers separately and passes
+  a tint uniform to the water shader, so glows and stars stay bright.
+- `render/ground.ts` paints the terrain texture once per grid change (hash of the medium array).
+- God powers live in `sim/powers.ts`; terrain-changing powers mark the world `edited` so saves keep the grid.
+
 ## Rendering
 
 * `terrain.ts` paints solids into a 4-texel-per-cell canvas once per terrain change, and draws water/lava as a

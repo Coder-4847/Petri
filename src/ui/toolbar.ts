@@ -1,7 +1,7 @@
 // Active player tool (inspect / place creature / god power): a status chip and a reticle that follows the pointer.
 import { icon } from './icons';
 
-export type Tool = { kind: 'inspect' } | { kind: 'spawn'; tpl: string; name: string; n: number } | { kind: 'power'; id: string; name: string; radius: number; ico: string };
+export type Tool = { kind: 'inspect' } | { kind: 'spawn'; tpl: string; name: string; n: number; species?: number } | { kind: 'power'; id: string; name: string; radius: number; ico: string; large?: boolean };
 
 export class ToolUI {
   tool: Tool = { kind: 'inspect' };
